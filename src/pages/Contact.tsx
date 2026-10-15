@@ -23,6 +23,9 @@ interface FormErrors {
   message?: string;
 }
 
+
+const CONTACT_EMAIL = 'fbmfari@gmail.com';
+
 export default function Contact({ onNotify }: ContactProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -91,26 +94,15 @@ export default function Contact({ onNotify }: ContactProps) {
       return;
     }
 
-    setIsSubmitting(true);
+    // There is no mail backend. Hand the message to the visitor's own email
+    // app instead, so it is really sent, and say so plainly. The form keeps
+    // its contents in case no email app opens.
+    const subject = `Portfolio enquiry from ${name.trim()}`;
+    const body = `${message.trim()}\n\n${name.trim()}\n${email.trim()}`;
+    window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-    try {
-      // Simulate network dispatch with realistic latency
-      await new Promise((resolve) => setTimeout(resolve, 800));
-
-      setIsSuccess(true);
-      onNotify(
-        'success',
-        `Thank you ${name.trim()}! Your message has been dispatched successfully.`
-      );
-      setName('');
-      setEmail('');
-      setMessage('');
-      setErrors({});
-    } catch {
-      onNotify('error', 'Failed to dispatch message. Please try again or email directly.');
-    } finally {
-      setIsSubmitting(false);
-    }
+    setIsSuccess(true);
+    setErrors({});
   };
 
   return (
@@ -262,17 +254,17 @@ export default function Contact({ onNotify }: ContactProps) {
               <div className="rounded-xl border border-[#32FF00]/50 bg-[#32FF00]/10 p-4 text-xs text-white space-y-2 animate-in fade-in">
                 <div className="flex items-center gap-2 text-[#32FF00] font-bold">
                   <CheckCircle2 className="h-4 w-4" />
-                  <span>Message Received!</span>
+                  <span>Opening your email app</span>
                 </div>
                 <p className="text-[#CCCCCC]">
-                  Thank you for reaching out. Farai will review your inquiry and follow up via email shortly.
+                  Your message has been placed in a new email to {CONTACT_EMAIL}. Press send there to deliver it. If no email app opened, copy your message and email that address directly.
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsSuccess(false)}
                   className="mt-2 text-xs font-semibold text-[#32FF00] hover:underline"
                 >
-                  Send another message
+                  Dismiss
                 </button>
               </div>
             )}
@@ -368,12 +360,12 @@ export default function Contact({ onNotify }: ContactProps) {
                 {isSubmitting ? (
                   <>
                     <RefreshCw className="h-4 w-4 animate-spin text-[#0F1419]" />
-                    <span>Sending Transmission...</span>
+                    <span>Opening email app...</span>
                   </>
                 ) : (
                   <>
                     <Send className="h-4 w-4" />
-                    <span>Send Message</span>
+                    <span>Send via Email App</span>
                   </>
                 )}
               </button>

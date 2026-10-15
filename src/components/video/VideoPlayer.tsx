@@ -42,7 +42,7 @@ export default function VideoPlayer({
   const [isMuted, setIsMuted] = useState<boolean>(true);
   const [selectedClassFilter, setSelectedClassFilter] = useState<string | null>(filterClass);
 
-  // Draw overlay bounding boxes and trajectories onto canvas
+  // Draw the backend's bounding boxes for the current frame onto the canvas
   const renderOverlay = useCallback(
     (timestamp: number) => {
       const canvas = canvasRef.current;
@@ -225,7 +225,7 @@ export default function VideoPlayer({
           className="h-full w-full object-contain pointer-events-none"
         />
 
-        {/* Real-time Bounding Box & Trajectory Overlay Canvas */}
+        {/* Bounding box overlay canvas */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 h-full w-full object-contain pointer-events-none"
