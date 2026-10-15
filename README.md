@@ -123,7 +123,7 @@ The app needs the FastAPI backend in `cv-backend` (YOLOv8-seg); see its
 `README.md`. It has no offline mode: every detection shown comes from the
 backend, and if the backend is unreachable or errors, the UI shows the error.
 
-- **Base URL**: `VITE_API_URL` (default `http://localhost:8000`), overridable at
+- **Base URL**: `VITE_API_URL`; unset, it is `http://localhost:8000` under `npm run dev` and the page's own origin in a production build. Overridable at
   runtime from **API Config** on the Demo page (stored as a base URL in
   localStorage).
 - **Calls made**: `POST /api/detect`, `POST /api/compare`,
