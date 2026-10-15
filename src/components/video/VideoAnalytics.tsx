@@ -25,22 +25,18 @@ export default function VideoAnalytics({
   const classBreakdown = Object.entries(summary.object_count_per_class).sort((a, b) => b[1] - a[1]);
   const maxClassCount = classBreakdown.length > 0 ? classBreakdown[0][1] : 1;
 
-  // Object count per frame distribution (downsampled to ~30 buckets for clean chart)
-  const bucketCount = Math.min(32, total_frames);
-  const bucketSize = Math.max(1, Math.floor(total_frames / bucketCount));
-  const densityBuckets: number[] = [];
-
-  for (let i = 0; i < bucketCount; i++) {
-    const start = i * bucketSize;
-    const end = Math.min(total_frames, start + bucketSize);
-    let countSum = 0;
-    for (let f = start; f < end; f++) {
-      if (frame_detections[f]) {
-        countSum += frame_detections[f].boxes?.length || 0;
-      }
-    }
-    densityBuckets.push(Math.round(countSum / (end - start)));
+  // Mean objects per analysed frame, bucketed by position in the source
+  // video. Buckets are placed by frame_number because frame_detections only
+  // holds every frame_stride-th frame.
+  const bucketCount = Math.max(1, Math.min(32, frame_detections.length));
+  const sums = new Array<number>(bucketCount).fill(0);
+  const counts = new Array<number>(bucketCount).fill(0);
+  for (const f of frame_detections) {
+    const b = Math.min(bucketCount - 1, Math.floor((f.frame_number / Math.max(1, total_frames)) * bucketCount));
+    sums[b] += f.total_objects;
+    counts[b] += 1;
   }
+  const densityBuckets = sums.map((sum, i) => (counts[i] ? Math.round(sum / counts[i]) : 0));
 
   const maxDensity = Math.max(1, ...densityBuckets);
 
@@ -54,10 +50,10 @@ export default function VideoAnalytics({
             <span>Temporal Video Stream Analytics</span>
           </div>
           <h4 className="font-display text-lg font-bold text-white mt-1">
-            Kinematic & Density Breakdown
+            Detection Density Breakdown
           </h4>
           <p className="text-xs text-neutral-400 mt-0.5">
-            Statistical metrics extracted across {total_frames} analyzed video frames
+            {detectionData.frames_analysed} of {total_frames} frames analysed (every {detectionData.frame_stride === 1 ? 'frame' : `${detectionData.frame_stride}th frame`}) with {detectionData.model_name}
           </p>
         </div>
 
@@ -82,19 +78,19 @@ export default function VideoAnalytics({
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 space-y-1">
-          <span className="text-xs text-neutral-400">Unique Tracked Targets</span>
+          <span className="text-xs text-neutral-400">Peak Frame</span>
           <div className="font-mono text-2xl font-bold text-[#32FF00] tabular-nums">
-            {summary.unique_tracks || 4} IDs
+            {summary.peak_frame_count} objs
           </div>
-          <p className="text-[10px] text-neutral-500">Persistent across occlusion</p>
+          <p className="text-[10px] text-neutral-500">at frame #{summary.peak_frame}</p>
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 space-y-1">
-          <span className="text-xs text-neutral-400">Effective Stream FPS</span>
+          <span className="text-xs text-neutral-400">Source Frame Rate</span>
           <div className="font-mono text-2xl font-bold text-cyan-400 tabular-nums">
             {detectionData.fps} FPS
           </div>
-          <p className="text-[10px] text-neutral-500">Processing throughput rate</p>
+          <p className="text-[10px] text-neutral-500">As encoded in the uploaded file</p>
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 space-y-1">
@@ -153,7 +149,7 @@ export default function VideoAnalytics({
         <div className="space-y-3">
           {classBreakdown.map(([cls, count]) => {
             const color = getClassColor(cls);
-            const conf = summary.average_confidence_per_class[cls] || 0.9;
+            const conf = summary.average_confidence_per_class[cls] ?? 0;
             const pct = Math.round((count / maxClassCount) * 100);
 
             return (

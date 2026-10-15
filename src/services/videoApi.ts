@@ -1,5 +1,11 @@
 import axios, { AxiosProgressEvent } from 'axios';
-import { VideoDetectionResponse, VideoProcessingOptions, VideoMetadata } from '../types';
+import {
+  FrameDetection,
+  VideoBox,
+  VideoDetectionResponse,
+  VideoMetadata,
+  VideoProcessingOptions,
+} from '../types';
 import { formatBytes } from '../utils/formatters';
 import { apiUrl, toApiError } from './apiClient';
 
@@ -72,24 +78,26 @@ export async function processVideo(
   const endpoint = apiUrl('/api/detect-video');
   const startTime = performance.now();
 
-  // The backend's UploadFile parameter is named `file`.
+  // The backend's UploadFile parameter is named `file`; everything else is a
+  // query parameter.
   const formData = new FormData();
   formData.append('file', videoFile);
-  formData.append('mode', options.mode);
-  formData.append('sampling_fps', String(options.samplingFps));
-  formData.append('confidence_threshold', String(options.confidenceThreshold));
-  formData.append('model_id', options.modelId);
-  formData.append('enable_tracking', String(options.enableTracking));
 
   let response;
   try {
     response = await axios.post<VideoDetectionResponse>(endpoint, formData, {
+      params: {
+        confidence: options.confidenceThreshold,
+        frame_stride: options.frameStride,
+        // The UI overlays boxes on the original video, so skip building and
+        // base64-encoding an annotated copy nobody reads.
+        return_video: false,
+      },
       timeout: VIDEO_REQUEST_TIMEOUT_MS,
       signal: options.signal,
       onUploadProgress: (progressEvent: AxiosProgressEvent) => {
-        if (progressEvent.total && options.onProgress) {
-          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          options.onProgress(0, 100, Math.min(50, Math.round(percent / 2)));
+        if (progressEvent.total && options.onUploadProgress) {
+          options.onUploadProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total));
         }
       },
     });
@@ -101,8 +109,35 @@ export async function processVideo(
     throw new Error(`Unexpected response from ${endpoint}: missing frame_detections.`);
   }
 
+  const data = response.data;
   return {
-    ...response.data,
+    ...data,
+    frame_detections: data.frame_detections.map((f) => withBoxes(f, data.width, data.height)),
+    // Wall-clock round trip, including upload and decode, is the honest
+    // number for video; the backend's figure covers inference only.
     processing_time_ms: Math.round(performance.now() - startTime),
   };
+}
+
+/**
+ * Flattens the backend's per-class pixel boxes ([x1, y1, x2, y2]) into
+ * normalised [x, y, w, h] boxes the overlay can scale to any render size.
+ */
+function withBoxes(frame: FrameDetection, width: number, height: number): FrameDetection {
+  if (!width || !height) return { ...frame, boxes: [] };
+
+  const boxes: VideoBox[] = [];
+  for (const [className, entry] of Object.entries(frame.detections)) {
+    const coords = entry.bounding_boxes ?? [];
+    coords.forEach(([x1, y1, x2, y2], i) => {
+      boxes.push({
+        id: `${frame.frame_number}-${className}-${i}`,
+        className,
+        confidence: entry.confidence_scores[i] ?? 0,
+        bbox: [x1 / width, y1 / height, (x2 - x1) / width, (y2 - y1) / height],
+        color: entry.color ?? '#32FF00',
+      });
+    });
+  }
+  return { ...frame, boxes };
 }

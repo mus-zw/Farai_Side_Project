@@ -1,7 +1,6 @@
 import axios, { AxiosProgressEvent } from 'axios';
-import { DetectionResponse, ImageMetadata, VisionModelId } from '../types';
+import { DetectionResponse, ImageMetadata } from '../types';
 import { formatBytes } from '../utils/formatters';
-import { VISION_MODELS } from '../utils/models';
 import { apiUrl, toApiError } from './apiClient';
 
 export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -10,16 +9,15 @@ export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 export const REQUEST_TIMEOUT_MS = 120_000;
 
 export interface AnalysisOptions {
+  // Sent as the `confidence` query parameter. Omitted means the backend's
+  // configured default (CONFIDENCE_THRESHOLD, 0.25).
   confidenceThreshold?: number;
-  modelId?: VisionModelId;
   onProgress?: (percent: number) => void;
   signal?: AbortSignal;
 }
 
 export interface VisionDetectionResult extends DetectionResponse {
   metadata?: ImageMetadata;
-  modelId?: VisionModelId;
-  modelName?: string;
 }
 
 /**
@@ -85,17 +83,19 @@ export async function detectObjects(
   imageMeta?: ImageMetadata
 ): Promise<VisionDetectionResult> {
   const endpoint = apiUrl('/api/detect');
-  const modelId = options.modelId || 'farai-fpn';
-  const modelInfo = VISION_MODELS[modelId] || VISION_MODELS['farai-fpn'];
 
-  // The backend's UploadFile parameter is named `file`.
+  // The backend's UploadFile parameter is named `file`. It serves whichever
+  // model it is configured with; the name comes back as `model_name`.
   const formData = new FormData();
   formData.append('file', fileOrBlob);
-  formData.append('model_id', modelId);
 
   let response;
   try {
     response = await axios.post<DetectionResponse>(endpoint, formData, {
+      params:
+        options.confidenceThreshold !== undefined
+          ? { confidence: options.confidenceThreshold }
+          : undefined,
       timeout: REQUEST_TIMEOUT_MS,
       signal: options.signal,
       onUploadProgress: (progressEvent: AxiosProgressEvent) => {
@@ -115,10 +115,5 @@ export async function detectObjects(
 
   if (options.onProgress) options.onProgress(100);
 
-  return {
-    ...response.data,
-    metadata: imageMeta,
-    modelId,
-    modelName: modelInfo.name,
-  };
+  return { ...response.data, metadata: imageMeta };
 }

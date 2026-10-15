@@ -17,18 +17,18 @@ import {
   VideoDetectionResponse,
 } from '../../types';
 import { processVideo } from '../../services/videoApi';
+import { frameIndexForFrameNumber } from '../../utils/videoFrames';
 import VideoUpload from './VideoUpload';
 import VideoPlayer from './VideoPlayer';
 import VideoTimeline from './VideoTimeline';
 import FrameAnalysis from './FrameAnalysis';
 import VideoAnalytics from './VideoAnalytics';
-import VideoComparison from './VideoComparison';
 
 interface VideoProcessorProps {
   onNotify: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-type VideoSubTab = 'player' | 'frames' | 'analytics' | 'compare';
+type VideoSubTab = 'player' | 'frames' | 'analytics';
 
 export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
   const [videoFile, setVideoFile] = useState<File | Blob | null>(null);
@@ -36,15 +36,12 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [processingProgress, setProcessingProgress] = useState<{
-    processed: number;
-    total: number;
-    percent: number;
-  }>({ processed: 0, total: 100, percent: 0 });
+  const [uploadPercent, setUploadPercent] = useState<number>(0);
 
   const [detectionResult, setDetectionResult] = useState<VideoDetectionResponse | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<VideoSubTab>('player');
-  const [currentFrameIndex, setCurrentFrameIndex] = useState<number>(0);
+  // A source-video frame number, shared by the player, timeline and inspector.
+  const [currentFrameNumber, setCurrentFrameNumber] = useState<number>(0);
 
   const handleVideoSelected = (file: File | Blob, meta: VideoMetadata, url: string) => {
     setVideoFile(file);
@@ -57,20 +54,19 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
     if (!videoFile || !videoMetadata) return;
 
     setIsProcessing(true);
-    setProcessingProgress({ processed: 0, total: 100, percent: 0 });
+    setUploadPercent(0);
 
     try {
       const result = await processVideo(videoFile, {
         ...options,
-        onProgress: (processed, total, percent) => {
-          setProcessingProgress({ processed, total, percent });
-        },
+        onUploadProgress: setUploadPercent,
       });
 
       setDetectionResult(result);
+      setCurrentFrameNumber(result.frame_detections[0]?.frame_number ?? 0);
       onNotify(
         'success',
-        `Video analysis complete! Processed ${result.total_frames} frames in ${result.processing_time_ms}ms.`
+        `Video analysis complete: ${result.frames_analysed} of ${result.total_frames} frames analysed in ${result.processing_time_ms}ms.`
       );
     } catch (err: any) {
       console.error('Video processing error:', err);
@@ -78,11 +74,6 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  // Export current frame snapshot as PNG
-  const handleExportFrameImage = (frameIdx: number) => {
-    onNotify('success', `Exported snapshot for Frame #${frameIdx}!`);
   };
 
   // Export full video metrics report as JSON
@@ -109,7 +100,7 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
         onVideoSelected={handleVideoSelected}
         onStartProcessing={handleStartProcessing}
         isProcessing={isProcessing}
-        processingProgress={processingProgress}
+        uploadPercent={uploadPercent}
         onNotify={onNotify}
       />
 
@@ -157,18 +148,6 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
               <span>Video Density Analytics</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('compare')}
-              className={`min-h-[38px] flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                activeSubTab === 'compare'
-                  ? 'bg-[#32FF00] text-neutral-950 shadow'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <Scale className="h-3.5 w-3.5" />
-              <span>Dual Stream Comparison</span>
-            </button>
           </div>
 
           {/* Subtab 1: Player & Timeline */}
@@ -177,13 +156,13 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
               <VideoPlayer
                 videoUrl={videoUrl}
                 detectionData={detectionResult}
-                onFrameChange={(f) => setCurrentFrameIndex(f)}
+                onFrameChange={(f) => setCurrentFrameNumber(f)}
               />
 
               <VideoTimeline
                 detectionData={detectionResult}
-                currentFrame={currentFrameIndex}
-                onSeekToFrame={(f) => setCurrentFrameIndex(f)}
+                currentFrame={currentFrameNumber}
+                onSeekToFrame={(f) => setCurrentFrameNumber(f)}
               />
             </div>
           )}
@@ -194,14 +173,18 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
               <VideoPlayer
                 videoUrl={videoUrl}
                 detectionData={detectionResult}
-                onFrameChange={(f) => setCurrentFrameIndex(f)}
+                onFrameChange={(f) => setCurrentFrameNumber(f)}
               />
 
               <FrameAnalysis
                 detectionData={detectionResult}
-                currentFrameIndex={currentFrameIndex}
-                onSelectFrame={(f) => setCurrentFrameIndex(f)}
-                onExportFrameImage={handleExportFrameImage}
+                currentFrameIndex={Math.max(
+                  0,
+                  frameIndexForFrameNumber(detectionResult.frame_detections, currentFrameNumber)
+                )}
+                onSelectFrame={(idx) =>
+                  setCurrentFrameNumber(detectionResult.frame_detections[idx]?.frame_number ?? 0)
+                }
               />
             </div>
           )}
@@ -214,13 +197,6 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
             />
           )}
 
-          {/* Subtab 4: Dual Stream Comparison */}
-          {activeSubTab === 'compare' && (
-            <VideoComparison
-              videoUrl={videoUrl}
-              detectionData={detectionResult}
-            />
-          )}
         </div>
       )}
     </div>

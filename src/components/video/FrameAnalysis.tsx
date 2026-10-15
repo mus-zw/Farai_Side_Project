@@ -17,7 +17,9 @@ export default function FrameAnalysis({
   onSelectFrame,
   onExportFrameImage,
 }: FrameAnalysisProps) {
+  // currentFrameIndex indexes the analysed frames, not source-video frames.
   const { total_frames, frame_detections } = detectionData;
+  const lastIndex = frame_detections.length - 1;
   const frame = frame_detections[currentFrameIndex] || frame_detections[0];
 
   const handlePrev = () => {
@@ -25,7 +27,7 @@ export default function FrameAnalysis({
   };
 
   const handleNext = () => {
-    onSelectFrame(Math.min(total_frames - 1, currentFrameIndex + 1));
+    onSelectFrame(Math.min(lastIndex, currentFrameIndex + 1));
   };
 
   return (
@@ -57,7 +59,7 @@ export default function FrameAnalysis({
           <button
             type="button"
             onClick={handleNext}
-            disabled={currentFrameIndex >= total_frames - 1}
+            disabled={currentFrameIndex >= lastIndex}
             className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-300 hover:text-white disabled:opacity-40"
             title="Next Frame"
           >
@@ -89,7 +91,6 @@ export default function FrameAnalysis({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {frame.boxes.map((box) => {
-              const color = getClassColor(box.className);
 
               return (
                 <div
@@ -99,14 +100,11 @@ export default function FrameAnalysis({
                   <div className="flex items-center gap-2.5">
                     <span
                       className="h-3 w-3 rounded-full shrink-0"
-                      style={{ backgroundColor: color.hex }}
+                      style={{ backgroundColor: box.color }}
                     />
                     <div>
                       <div className="text-xs font-semibold text-white">
-                        {capitalizeClass(box.className)}{' '}
-                        <span className="font-mono text-neutral-400 font-normal">
-                          (Track #{box.trackId})
-                        </span>
+                        {capitalizeClass(box.className)}
                       </div>
                       <div className="text-[10px] text-neutral-500 font-mono">
                         Coord: [{box.bbox.map((v) => v.toFixed(2)).join(', ')}]

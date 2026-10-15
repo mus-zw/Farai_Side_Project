@@ -15,20 +15,19 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { BatchItem, VisionModelId } from '../types';
+import { BatchItem } from '../types';
 import { detectObjects, validateAndExtractImageMetadata } from '../services/visionApi';
 import { formatBytes, capitalizeClass } from '../utils/formatters';
 import { getClassColor } from '../utils/colors';
+import { dataUrlBase64Payload, dataUrlExtension } from '../utils/dataUrl';
 
 interface BatchUploadProps {
-  modelId: VisionModelId;
   confidenceThreshold: number;
   onNotify: (type: 'success' | 'error' | 'info', message: string) => void;
   onExpandFullscreen?: (src: string, title: string) => void;
 }
 
 export default function BatchUpload({
-  modelId,
   confidenceThreshold,
   onNotify,
   onExpandFullscreen,
@@ -106,7 +105,6 @@ export default function BatchUpload({
         const result = await detectObjects(
           item.file,
           {
-            modelId,
             confidenceThreshold,
             onProgress: (p) => {
               setItems((prev) =>
@@ -127,6 +125,7 @@ export default function BatchUpload({
                     totalObjects: result.total_objects,
                     processingTimeMs: result.processing_time_ms,
                     annotatedImage: result.annotated_image_base64,
+                    modelName: result.model_name,
                     detections: result.detections,
                   },
                 }
@@ -168,8 +167,11 @@ export default function BatchUpload({
 
     // Add images
     doneItems.forEach((item, idx) => {
-      const base64Data = item.result!.annotatedImage.replace(/^data:image\/png;base64,/, '');
-      const filename = `annotated_${idx + 1}_${item.file.name.replace(/\.[^/.]+$/, '')}.png`;
+      // The backend returns JPEG data URLs; take the format from the URL
+      // itself rather than assuming one.
+      const dataUrl = item.result!.annotatedImage;
+      const base64Data = dataUrlBase64Payload(dataUrl);
+      const filename = `annotated_${idx + 1}_${item.file.name.replace(/\.[^/.]+$/, '')}.${dataUrlExtension(dataUrl)}`;
       folder?.file(filename, base64Data, { base64: true });
     });
 
@@ -177,7 +179,7 @@ export default function BatchUpload({
     const summaryData = {
       pipeline: 'Farai Bodias Musariri Computer Vision Batch Engine',
       timestamp: new Date().toISOString(),
-      modelId,
+      model: doneItems[0]?.result?.modelName,
       confidenceThreshold,
       totalProcessed: doneItems.length,
       items: doneItems.map((item) => ({

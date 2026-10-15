@@ -12,17 +12,17 @@ import {
   Clock,
   Layers,
 } from 'lucide-react';
-import { VideoMetadata, VideoProcessingOptions, VisionModelId } from '../../types';
+import { VideoMetadata, VideoProcessingOptions } from '../../types';
 import { validateAndExtractVideoMetadata } from '../../services/videoApi';
 import { generateBenchmarkTrafficVideo } from '../../utils/sampleVideo';
 import { formatBytes } from '../../utils/formatters';
-import { VISION_MODELS, MODEL_LIST } from '../../utils/models';
 
 interface VideoUploadProps {
   onVideoSelected: (file: File | Blob, metadata: VideoMetadata, previewUrl: string) => void;
   onStartProcessing: (options: VideoProcessingOptions) => void;
   isProcessing: boolean;
-  processingProgress: { processed: number; total: number; percent: number };
+  // Upload progress only: the backend analyses synchronously and reports nothing until it finishes.
+  uploadPercent: number;
   onNotify: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
@@ -30,7 +30,7 @@ export default function VideoUpload({
   onVideoSelected,
   onStartProcessing,
   isProcessing,
-  processingProgress,
+  uploadPercent,
   onNotify,
 }: VideoUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
@@ -41,12 +41,9 @@ export default function VideoUpload({
   } | null>(null);
 
   // Video processing configuration
-  const [mode, setMode] = useState<'entire' | 'sample' | 'realtime'>('sample');
-  const [samplingFps, setSamplingFps] = useState<number>(10);
-  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5);
-  const [modelId, setModelId] = useState<VisionModelId>('farai-fpn');
-  const [enableTracking, setEnableTracking] = useState<boolean>(true);
-  const [enableTrajectory, setEnableTrajectory] = useState<boolean>(true);
+  // Defaults match the backend's DEFAULT_FRAME_STRIDE (5) and CONFIDENCE_THRESHOLD (0.25).
+  const [frameStride, setFrameStride] = useState<number>(5);
+  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.25);
   const [isGeneratingSample, setIsGeneratingSample] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -99,14 +96,7 @@ export default function VideoUpload({
       return;
     }
 
-    onStartProcessing({
-      mode,
-      samplingFps,
-      confidenceThreshold,
-      modelId,
-      enableTracking,
-      enableTrajectory,
-    });
+    onStartProcessing({ frameStride, confidenceThreshold });
   };
 
   return (
@@ -218,7 +208,7 @@ export default function VideoUpload({
               {isProcessing ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" />
-                  <span>Processing Frames ({processingProgress.percent}%)...</span>
+                  <span>{uploadPercent < 100 ? `Uploading (${uploadPercent}%)...` : 'Analysing...'}</span>
                 </>
               ) : (
                 <>
@@ -234,155 +224,72 @@ export default function VideoUpload({
             <div className="space-y-2 rounded-xl border border-[#32FF00]/30 bg-[#32FF00]/10 p-4">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-[#32FF00]">
-                  Frame-by-frame analysis in progress
+                  {uploadPercent < 100
+                    ? 'Uploading video to the backend'
+                    : 'Upload complete. The backend is analysing frames; results arrive all at once when it finishes.'}
                 </span>
                 <span className="font-mono text-[#32FF00] font-bold tabular-nums">
-                  {processingProgress.processed} of {processingProgress.total} frames processed ({processingProgress.percent}%)
+                  {uploadPercent}%
                 </span>
               </div>
               <div className="h-2 w-full rounded-full bg-neutral-800 overflow-hidden">
                 <div
-                  className="h-full bg-[#32FF00] transition-all duration-200"
-                  style={{ width: `${Math.max(5, processingProgress.percent)}%` }}
+                  className={`h-full bg-[#32FF00] transition-all duration-200 ${uploadPercent >= 100 ? 'animate-pulse' : ''}`}
+                  style={{ width: `${Math.max(5, uploadPercent)}%` }}
                 />
               </div>
             </div>
           )}
 
-          {/* Options Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Mode Selection */}
-            <div className="space-y-2">
-              <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-300">
-                Processing Strategy
-              </label>
-              <div className="space-y-2 text-xs">
-                <label className="flex items-center gap-2.5 p-2 rounded-lg border border-neutral-800 bg-neutral-950 cursor-pointer hover:border-neutral-700">
-                  <input
-                    type="radio"
-                    name="proc-mode"
-                    value="sample"
-                    checked={mode === 'sample'}
-                    onChange={() => setMode('sample')}
-                    className="accent-[#32FF00]"
-                  />
-                  <div>
-                    <span className="font-semibold text-white block">Sample Frames (Recommended)</span>
-                    <span className="text-[11px] text-neutral-400">Process every Nth frame for fast edge preview</span>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-2.5 p-2 rounded-lg border border-neutral-800 bg-neutral-950 cursor-pointer hover:border-neutral-700">
-                  <input
-                    type="radio"
-                    name="proc-mode"
-                    value="entire"
-                    checked={mode === 'entire'}
-                    onChange={() => setMode('entire')}
-                    className="accent-[#32FF00]"
-                  />
-                  <div>
-                    <span className="font-semibold text-white block">Process Entire Video</span>
-                    <span className="text-[11px] text-neutral-400">Exhaustive frame-by-frame verification</span>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-2.5 p-2 rounded-lg border border-neutral-800 bg-neutral-950 cursor-pointer hover:border-neutral-700">
-                  <input
-                    type="radio"
-                    name="proc-mode"
-                    value="realtime"
-                    checked={mode === 'realtime'}
-                    onChange={() => setMode('realtime')}
-                    className="accent-[#32FF00]"
-                  />
-                  <div>
-                    <span className="font-semibold text-white block">Real-Time Overlay</span>
-                    <span className="text-[11px] text-neutral-400">Stream predictions dynamically during playback</span>
-                  </div>
-                </label>
+          {/* Options: exactly the parameters /api/detect-video accepts */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold uppercase tracking-wider text-neutral-300">
+                  Frame Stride:
+                </span>
+                <span className="font-mono text-[#32FF00] font-bold tabular-nums">
+                  every {frameStride === 1 ? 'frame' : `${frameStride} frames`}
+                </span>
               </div>
+              <input
+                type="range"
+                min="1"
+                max="60"
+                step="1"
+                value={frameStride}
+                onChange={(e) => setFrameStride(parseInt(e.target.value, 10))}
+                className="w-full accent-[#32FF00] cursor-pointer"
+              />
+              <p className="text-[11px] text-neutral-500">
+                Analyses every {frameStride === 1 ? '' : `${frameStride}th `}frame
+                {selectedVideo.meta.durationSeconds > 0 &&
+                  ` (about ${Math.max(1, Math.round((selectedVideo.meta.durationSeconds * 30) / frameStride))} frames at 30 fps)`}
+                . Lower is slower.
+              </p>
             </div>
 
-            {/* Frame Sampling Rate & Model */}
-            <div className="space-y-4">
-              {mode === 'sample' && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold uppercase tracking-wider text-neutral-300">
-                      Sampling Rate:
-                    </span>
-                    <span className="font-mono text-[#32FF00] font-bold tabular-nums">
-                      {samplingFps} FPS
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="30"
-                    step="1"
-                    value={samplingFps}
-                    onChange={(e) => setSamplingFps(parseInt(e.target.value, 10))}
-                    className="w-full accent-[#32FF00] cursor-pointer"
-                  />
-                  <p className="text-[11px] text-neutral-500">
-                    Extracts {samplingFps} frame{samplingFps === 1 ? '' : 's'} per second of video
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-300">
-                  Target Neural Backbone
-                </label>
-                <select
-                  value={modelId}
-                  onChange={(e) => setModelId(e.target.value as VisionModelId)}
-                  className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-xs text-white focus:border-[#32FF00] focus:outline-none"
-                >
-                  {MODEL_LIST.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-neutral-500">
-                  {VISION_MODELS[modelId].tagline}
-                </p>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold uppercase tracking-wider text-neutral-300">
+                  Confidence Threshold:
+                </span>
+                <span className="font-mono text-[#32FF00] font-bold tabular-nums">
+                  {Math.round(confidenceThreshold * 100)}%
+                </span>
               </div>
-            </div>
-
-            {/* Tracking & Trajectory Toggles */}
-            <div className="space-y-3">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-neutral-300">
-                Temporal Vision Features
-              </span>
-
-              <label className="flex items-center gap-2.5 p-2 rounded-lg border border-neutral-800 bg-neutral-950 text-xs cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={enableTracking}
-                  onChange={(e) => setEnableTracking(e.target.checked)}
-                  className="rounded border-neutral-700 bg-neutral-800 text-[#32FF00] focus:ring-[#32FF00]"
-                />
-                <div>
-                  <span className="font-semibold text-white block">Multi-Object Tracking (MOT)</span>
-                  <span className="text-[11px] text-neutral-400">Persistent ID association across frames</span>
-                </div>
-              </label>
-
-              <label className="flex items-center gap-2.5 p-2 rounded-lg border border-neutral-800 bg-neutral-950 text-xs cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={enableTrajectory}
-                  onChange={(e) => setEnableTrajectory(e.target.checked)}
-                  className="rounded border-neutral-700 bg-neutral-800 text-[#32FF00] focus:ring-[#32FF00]"
-                />
-                <div>
-                  <span className="font-semibold text-white block">Trajectory Path Trails</span>
-                  <span className="text-[11px] text-neutral-400">Draw motion vectors behind moving targets</span>
-                </div>
-              </label>
+              <input
+                type="range"
+                min="0.05"
+                max="0.95"
+                step="0.01"
+                value={confidenceThreshold}
+                onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
+                className="w-full accent-[#32FF00] cursor-pointer"
+              />
+              <p className="text-[11px] text-neutral-500">
+                Detections below this confidence are discarded by the backend.
+              </p>
             </div>
           </div>
         </form>

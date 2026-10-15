@@ -23,15 +23,16 @@ import {
   AnalysisOptions,
 } from '../services/visionApi';
 import { getApiBaseUrl, setApiBaseUrl } from '../services/apiClient';
+import { getHealth, getModelInfo, HealthResponse, ModelInfoResponse } from '../services/systemApi';
 import { SAMPLE_IMAGES } from '../utils/sampleData';
-import { VISION_MODELS, MODEL_LIST } from '../utils/models';
+import { dataUrlExtension } from '../utils/dataUrl';
 import {
   loadGallery,
   saveGallery,
   clearGalleryStorage,
   createThumbnail,
 } from '../utils/galleryStorage';
-import { GalleryItem, SampleImageOption, ImageMetadata, VisionModelId } from '../types';
+import { GalleryItem, SampleImageOption, ImageMetadata } from '../types';
 import ResultsDisplay from '../components/ResultsDisplay';
 import BeforeAfterSlider from '../components/BeforeAfterSlider';
 import ModelComparison from '../components/ModelComparison';
@@ -57,8 +58,10 @@ export default function Demo({ onNotify }: DemoProps) {
   // Navigation Mode (for image suite)
   const [activeTab, setActiveTab] = useState<DemoTabMode>('single');
 
-  // Active Model
-  const [selectedModel, setSelectedModel] = useState<VisionModelId>('farai-fpn');
+  // What the backend reports about itself. null until the first poll answers.
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [modelInfo, setModelInfo] = useState<ModelInfoResponse | null>(null);
 
   // Single Image State
   const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'complete' | 'error'>('idle');
@@ -71,10 +74,8 @@ export default function Demo({ onNotify }: DemoProps) {
   const [activeSampleId, setActiveSampleId] = useState<string | null>(null);
   const [detectionResult, setDetectionResult] = useState<VisionDetectionResult | null>(null);
 
-  // Inspector Options
-  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.5);
-  const [showMasks, setShowMasks] = useState<boolean>(true);
-  const [showLabels, setShowLabels] = useState<boolean>(true);
+  // Inspector Options. 0.25 matches the backend's CONFIDENCE_THRESHOLD default.
+  const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.25);
   const [highlightClass, setHighlightClass] = useState<string | null>(null);
 
   // Modals & Gallery
@@ -91,6 +92,26 @@ export default function Demo({ onNotify }: DemoProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeObjectUrlRef = useRef<string | null>(null);
+  const rerunTimerRef = useRef<number | null>(null);
+
+  // Poll backend status so "backend down" is visible before an upload fails.
+  const refreshBackendStatus = useCallback(async () => {
+    try {
+      const h = await getHealth();
+      setHealth(h);
+      setHealthError(null);
+      setModelInfo(await getModelInfo());
+    } catch (err: any) {
+      setHealth(null);
+      setHealthError(err?.message || 'Backend unreachable.');
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshBackendStatus();
+    const timer = window.setInterval(refreshBackendStatus, 15000);
+    return () => window.clearInterval(timer);
+  }, [refreshBackendStatus]);
 
   // Initialize Gallery
   useEffect(() => {
@@ -108,6 +129,7 @@ export default function Demo({ onNotify }: DemoProps) {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
+      if (rerunTimerRef.current) window.clearTimeout(rerunTimerRef.current);
     };
   }, []);
 
@@ -140,7 +162,6 @@ export default function Demo({ onNotify }: DemoProps) {
 
       const options: AnalysisOptions = {
         confidenceThreshold,
-        modelId: selectedModel,
         signal: abortControllerRef.current.signal,
         onProgress: (p) => {
           setUploadProgress(p);
@@ -175,9 +196,8 @@ export default function Demo({ onNotify }: DemoProps) {
         processingTimeMs: result.processing_time_ms,
         detections: result.detections,
         topClasses,
-        modelId: selectedModel,
-        modelName: result.modelName,
-        thresholdUsed: confidenceThreshold,
+        modelName: result.model_name,
+        thresholdUsed: result.confidence_threshold,
         metadata: meta,
       };
 
@@ -194,37 +214,35 @@ export default function Demo({ onNotify }: DemoProps) {
     }
   };
 
-  // Re-run inference when options change on active image
-  const handleOptionChange = async (
-    newThreshold?: number,
-    newShowMasks?: boolean,
-    newShowLabels?: boolean,
-    newHighlightClass?: string | null,
-    newModel?: VisionModelId
-  ) => {
-    if (!originalImageUrl || !currentFile) return;
+  // Re-run inference when the confidence threshold changes. The slider fires
+  // on every step while dragging, so debounce, and abort any request still
+  // in flight so a stale result can't land after a newer one.
+  const rerunWithThreshold = (threshold: number) => {
+    if (!currentFile) return;
+    if (rerunTimerRef.current) window.clearTimeout(rerunTimerRef.current);
 
-    const threshold = newThreshold ?? confidenceThreshold;
-    const masks = newShowMasks ?? showMasks;
-    const labels = newShowLabels ?? showLabels;
-    const highlight = newHighlightClass !== undefined ? newHighlightClass : highlightClass;
-    const model = newModel ?? selectedModel;
+    rerunTimerRef.current = window.setTimeout(async () => {
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-    try {
-      const options: AnalysisOptions = {
-        confidenceThreshold: threshold,
-        modelId: model,
-      };
-
-      const result = await detectObjects(currentFile, options, imageMetadata || undefined);
-      setDetectionResult(result);
-    } catch (err: any) {
-      console.error('Failed to recompute annotations:', err);
-      const msg = err?.message || 'Failed to re-run detection.';
-      setStatus('error');
-      setErrorMessage(msg);
-      onNotify('error', msg);
-    }
+      try {
+        const result = await detectObjects(
+          currentFile,
+          { confidenceThreshold: threshold, signal: controller.signal },
+          imageMetadata || undefined
+        );
+        setDetectionResult(result);
+        setStatus('complete');
+        setErrorMessage(null);
+      } catch (err: any) {
+        if (controller.signal.aborted) return;
+        const msg = err?.message || 'Failed to re-run detection.';
+        setStatus('error');
+        setErrorMessage(msg);
+        onNotify('error', msg);
+      }
+    }, 350);
   };
 
   // File upload change
@@ -342,15 +360,17 @@ export default function Demo({ onNotify }: DemoProps) {
   const handleLoadGalleryItem = (item: GalleryItem) => {
     setCleanObjectUrl(item.originalImage);
     setImageMetadata(item.metadata || null);
-    if (item.modelId) setSelectedModel(item.modelId);
+    // Restored results can't be re-run: the original file isn't stored.
+    setCurrentFile(null);
     setDetectionResult({
       total_objects: item.totalObjects,
       detections: item.detections,
       processing_time_ms: item.processingTimeMs,
       annotated_image_base64: item.annotatedImage,
-      modelId: item.modelId,
-      modelName: item.modelName,
+      model_name: item.modelName || 'unknown',
+      confidence_threshold: item.thresholdUsed ?? confidenceThreshold,
     });
+    if (item.thresholdUsed !== undefined) setConfidenceThreshold(item.thresholdUsed);
     setStatus('complete');
     setActiveTab('single');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -362,7 +382,7 @@ export default function Demo({ onNotify }: DemoProps) {
     if (!detectionResult?.annotated_image_base64) return;
     const link = document.createElement('a');
     link.href = detectionResult.annotated_image_base64;
-    link.download = `farai-cv-detection-${Date.now()}.png`;
+    link.download = `farai-cv-detection-${Date.now()}.${dataUrlExtension(detectionResult.annotated_image_base64)}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -374,11 +394,12 @@ export default function Demo({ onNotify }: DemoProps) {
     const report = {
       engineer: 'Farai Bodias Musariri',
       timestamp: new Date().toISOString(),
-      model: detectionResult.modelName || selectedModel,
+      model: detectionResult.model_name,
       processing_time_ms: detectionResult.processing_time_ms,
       total_objects: detectionResult.total_objects,
       detections: detectionResult.detections,
-      threshold: confidenceThreshold,
+      threshold: detectionResult.confidence_threshold,
+      cached: detectionResult.cached ?? false,
       image_metadata: imageMetadata,
     };
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
@@ -503,8 +524,8 @@ export default function Demo({ onNotify }: DemoProps) {
 
         <div className="text-xs text-neutral-400 hidden lg:block pr-3 font-mono">
           {mediaMode === 'image'
-            ? 'Static frames · FPN multi-scale · Instance masks'
-            : 'Frame-by-frame MOT tracking · Kinematic trajectory · Timeline'}
+            ? 'Static frames · Detection · Instance masks'
+            : 'Frame-by-frame detection · Timeline'}
         </div>
       </div>
 
@@ -574,29 +595,39 @@ export default function Demo({ onNotify }: DemoProps) {
         <div className="space-y-8 animate-in fade-in">
           {/* Upload Zone & Architecture Selector */}
           <div className="space-y-4">
-            {/* Architecture Selector Bar */}
+            {/* Backend status: what will actually run this image */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-neutral-800 bg-neutral-900/60 text-xs">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-neutral-300">Active Architecture:</span>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => {
-                    const m = e.target.value as VisionModelId;
-                    setSelectedModel(m);
-                    handleOptionChange(undefined, undefined, undefined, undefined, m);
-                  }}
-                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-xs text-white font-medium focus:border-[#32FF00] focus:outline-none"
-                >
-                  {MODEL_LIST.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.architecture})
-                    </option>
-                  ))}
-                </select>
+                <span
+                  className={`inline-block h-2.5 w-2.5 rounded-full ${
+                    health ? (health.status === 'loading' ? 'bg-amber-400' : 'bg-[#32FF00]') : 'bg-rose-500'
+                  }`}
+                />
+                <span className="font-semibold text-neutral-300">Backend:</span>
+                {health ? (
+                  <span className="font-mono text-white">
+                    {health.model_name} · {health.device}
+                    {health.status !== 'healthy' && ` · ${health.status}`}
+                  </span>
+                ) : (
+                  <span className="text-rose-300">{healthError || 'Checking...'}</span>
+                )}
               </div>
 
-              <div className="text-[11px] text-neutral-400">
-                {VISION_MODELS[selectedModel].tagline}
+              <div className="flex items-center gap-3 text-[11px] text-neutral-400">
+                {modelInfo && (
+                  <span>
+                    {modelInfo.num_classes} classes
+                    {modelInfo.supports_segmentation ? ' · segmentation' : ''}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={refreshBackendStatus}
+                  className="underline hover:text-white"
+                >
+                  Recheck
+                </button>
               </div>
             </div>
 
@@ -721,27 +752,14 @@ export default function Demo({ onNotify }: DemoProps) {
               detectionResult={detectionResult}
               imageMetadata={imageMetadata}
               confidenceThreshold={confidenceThreshold}
-              showMasks={showMasks}
-              showLabels={showLabels}
               highlightClass={highlightClass}
-              totalCandidateBoxes={detectionResult.total_objects}
               onThresholdChange={(t) => {
                 setConfidenceThreshold(t);
-                handleOptionChange(t, undefined, undefined, undefined);
+                rerunWithThreshold(t);
               }}
-              onToggleMasks={(m) => {
-                setShowMasks(m);
-                handleOptionChange(undefined, m, undefined, undefined);
-              }}
-              onToggleLabels={(l) => {
-                setShowLabels(l);
-                handleOptionChange(undefined, undefined, l, undefined);
-              }}
-              onSelectClassFilter={(c) => {
-                setHighlightClass(c);
-                handleOptionChange(undefined, undefined, undefined, c);
-              }}
-              onDownloadPng={handleDownloadAnnotated}
+              canRerun={currentFile !== null}
+              onSelectClassFilter={setHighlightClass}
+              onDownloadImage={handleDownloadAnnotated}
               onDownloadJson={handleDownloadJsonReport}
               onReset={handleReset}
               onExpandFullscreen={(src, title) => setFullscreenImage({ src, title })}
@@ -762,7 +780,6 @@ export default function Demo({ onNotify }: DemoProps) {
       {/* TAB 2: Batch Processing Mode */}
       {activeTab === 'batch' && (
         <BatchUpload
-          modelId={selectedModel}
           confidenceThreshold={confidenceThreshold}
           onNotify={onNotify}
           onExpandFullscreen={(src, title) => setFullscreenImage({ src, title })}
@@ -774,8 +791,6 @@ export default function Demo({ onNotify }: DemoProps) {
         <ModelComparison
           currentFile={currentFile}
           originalImageUrl={originalImageUrl}
-          activeSampleId={activeSampleId}
-          imageMetadata={imageMetadata}
           onNotify={onNotify}
           onExpandFullscreen={(src, title) => setFullscreenImage({ src, title })}
         />

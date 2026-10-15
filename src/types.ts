@@ -1,6 +1,12 @@
+// Mirrors ClassDetections / DetectionResponse in cv-backend/app/schemas.py.
 export interface DetectionScoreBreakdown {
   count: number;
   confidence_scores: number[];
+  // [x1, y1, x2, y2] in pixels of the analysed image.
+  bounding_boxes?: number[][];
+  // Hex colour the backend used for this class in the annotated image.
+  color?: string;
+  // Not sent by the backend; some views compute and cache it.
   average_confidence?: number;
 }
 
@@ -8,7 +14,14 @@ export interface DetectionResponse {
   total_objects: number;
   detections: Record<string, DetectionScoreBreakdown>;
   processing_time_ms: number;
+  // data: URL; the backend encodes JPEG.
   annotated_image_base64: string;
+  model_name: string;
+  confidence_threshold: number;
+  // Optional only because results restored from the gallery don't carry them.
+  image_width?: number;
+  image_height?: number;
+  cached?: boolean;
 }
 
 export interface BoundingBox {
@@ -86,37 +99,50 @@ export interface BatchItem {
     totalObjects: number;
     processingTimeMs: number;
     annotatedImage: string;
+    modelName: string;
     detections: Record<string, DetectionScoreBreakdown>;
   };
   error?: string;
 }
 
-export interface ModelComparisonResult {
-  modelA: {
-    info: VisionModelInfo;
-    totalObjects: number;
-    processingTimeMs: number;
-    avgConfidence: number;
-    detections: Record<string, DetectionScoreBreakdown>;
-    annotatedImage: string;
-  };
-  modelB: {
-    info: VisionModelInfo;
-    totalObjects: number;
-    processingTimeMs: number;
-    avgConfidence: number;
-    detections: Record<string, DetectionScoreBreakdown>;
-    annotatedImage: string;
-  };
-  fasterModel: 'A' | 'B' | 'Tie';
-  moreConfidentModel: 'A' | 'B' | 'Tie';
-  speedupPercentage: number;
-  classComparison: {
-    className: string;
-    countA: number;
-    countB: number;
-    diff: number;
-  }[];
+// Mirrors CompareResponse and friends in cv-backend/app/schemas.py.
+export interface ModelComparisonEntry {
+  model_name: string;
+  label: string;
+  total_objects: number;
+  detections: Record<string, DetectionScoreBreakdown>;
+  processing_time_ms: number;
+  annotated_image_base64: string;
+  cached?: boolean;
+}
+
+export interface ClassCountComparison {
+  class_name: string;
+  counts: Record<string, number>;
+}
+
+export interface PairwiseAgreement {
+  model_a: string;
+  model_b: string;
+  matched: number;
+  f1: number;
+}
+
+export interface ComparisonSummary {
+  classes: ClassCountComparison[];
+  fastest_model: string;
+  most_objects_model: string;
+  agreement: number;
+  agreement_method: string;
+  pairwise: PairwiseAgreement[];
+}
+
+export interface CompareResponse {
+  image_width: number;
+  image_height: number;
+  confidence_threshold: number;
+  results: ModelComparisonEntry[];
+  comparison: ComparisonSummary;
 }
 
 export interface AnalyticsStats {
@@ -133,51 +159,57 @@ export interface AnalyticsStats {
   }[];
 }
 
-export interface VideoTrackedObject {
+// One detected box in a video frame, derived client-side from the backend's
+// per-class bounding_boxes. There is no tracking: boxes carry no identity
+// across frames.
+export interface VideoBox {
   id: string;
-  trackId: number;
   className: string;
   confidence: number;
-  bbox: [number, number, number, number]; // [x, y, w, h] normalized
-  trajectory?: [number, number][]; // center trajectory coordinates
+  bbox: [number, number, number, number]; // [x, y, w, h] normalised 0-1
   color: string;
-  polygon?: [number, number][];
 }
 
+// Mirrors FrameDetection / VideoSummary / VideoResponse in cv-backend/app/schemas.py.
 export interface FrameDetection {
   frame_number: number;
   timestamp: number; // in seconds
+  total_objects: number;
   detections: Record<string, DetectionScoreBreakdown>;
-  boxes?: VideoTrackedObject[];
-  sceneChange?: boolean;
-  snapshotUrl?: string;
+  // Added by videoApi from `detections`; not part of the backend response.
+  boxes?: VideoBox[];
 }
 
 export interface VideoSummary {
   total_objects: number;
-  unique_tracks?: number;
+  classes_detected: string[];
   object_count_per_class: Record<string, number>;
   average_confidence_per_class: Record<string, number>;
+  peak_frame: number;
+  peak_frame_count: number;
 }
 
 export interface VideoDetectionResponse {
   total_frames: number;
+  frames_analysed: number;
   fps: number;
   duration_seconds: number;
-  annotated_video_url?: string;
+  frame_stride: number;
+  width: number;
+  height: number;
+  processing_time_ms: number;
   frame_detections: FrameDetection[];
+  annotated_video_base64: string | null;
   summary: VideoSummary;
-  processing_time_ms?: number;
+  model_name: string;
+  confidence_threshold: number;
 }
 
 export interface VideoProcessingOptions {
-  mode: 'entire' | 'sample' | 'realtime';
-  samplingFps: number; // 1-30
+  // Analyse every Nth frame (backend `frame_stride`, 1-60).
+  frameStride: number;
   confidenceThreshold: number;
-  modelId: VisionModelId;
-  enableTracking: boolean;
-  enableTrajectory: boolean;
-  onProgress?: (processed: number, total: number, percent: number) => void;
+  onUploadProgress?: (percent: number) => void;
   signal?: AbortSignal;
 }
 

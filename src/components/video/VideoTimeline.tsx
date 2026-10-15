@@ -45,7 +45,7 @@ export default function VideoTimeline({
                   <span>{capitalizeClass(cls)}</span>
                 </span>
                 <span className="font-mono text-[11px] text-neutral-400">
-                  {summary.object_count_per_class[cls]} frame appearances
+                  {summary.object_count_per_class[cls]} detections
                 </span>
               </div>
 
@@ -65,7 +65,8 @@ export default function VideoTimeline({
                   if (!hasClass) return null;
 
                   const leftPct = (f.frame_number / total_frames) * 100;
-                  const widthPct = Math.max(0.6, (1 / total_frames) * 100);
+                  // Each analysed frame stands for frame_stride source frames.
+                  const widthPct = Math.max(0.6, (detectionData.frame_stride / total_frames) * 100);
 
                   return (
                     <div

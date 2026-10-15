@@ -12,15 +12,12 @@ interface ResultsDisplayProps {
   detectionResult: VisionDetectionResult;
   imageMetadata: ImageMetadata | null;
   confidenceThreshold: number;
-  showMasks: boolean;
-  showLabels: boolean;
   highlightClass: string | null;
-  totalCandidateBoxes: number;
   onThresholdChange: (newThreshold: number) => void;
-  onToggleMasks: (val: boolean) => void;
-  onToggleLabels: (val: boolean) => void;
+  // False when the original file isn't available (e.g. a gallery restore).
+  canRerun: boolean;
   onSelectClassFilter: (className: string | null) => void;
-  onDownloadPng: () => void;
+  onDownloadImage: () => void;
   onDownloadJson: () => void;
   onReset: () => void;
   onExpandFullscreen?: (src: string, title: string) => void;
@@ -31,27 +28,22 @@ export default function ResultsDisplay({
   detectionResult,
   imageMetadata,
   confidenceThreshold,
-  showMasks,
-  showLabels,
   highlightClass,
-  totalCandidateBoxes,
   onThresholdChange,
-  onToggleMasks,
-  onToggleLabels,
+  canRerun,
   onSelectClassFilter,
-  onDownloadPng,
+  onDownloadImage,
   onDownloadJson,
   onReset,
   onExpandFullscreen,
 }: ResultsDisplayProps) {
   return (
     <div className="space-y-6">
-      {/* 1. Interactive Confidence Filtering Slider Component */}
+      {/* 1. Confidence threshold: changing it re-runs detection on the backend. */}
       <ConfidenceSlider
         value={confidenceThreshold}
         onChange={onThresholdChange}
-        totalAvailable={totalCandidateBoxes}
-        shownCount={detectionResult.total_objects}
+        disabled={!canRerun}
       />
 
       {/* 2. Before/After Slider & Visual Inspection */}
@@ -66,37 +58,20 @@ export default function ResultsDisplay({
 
       {/* 3. Controls & Toggles Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#16213E] bg-[#16213E]/60 p-4">
-        <div className="flex items-center gap-5 text-xs text-[#CCCCCC]">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showMasks}
-              onChange={(e) => onToggleMasks(e.target.checked)}
-              className="rounded border-[#16213E] bg-[#0F1419] text-[#32FF00] focus:ring-[#32FF00] accent-[#32FF00]"
-            />
-            <span>Instance Segmentation Masks</span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showLabels}
-              onChange={(e) => onToggleLabels(e.target.checked)}
-              className="rounded border-[#16213E] bg-[#0F1419] text-[#32FF00] focus:ring-[#32FF00] accent-[#32FF00]"
-            />
-            <span>Bounding Box Tags & Confidences</span>
-          </label>
+        <div className="text-xs text-[#CCCCCC]">
+          {detectionResult.cached ? 'Served from backend cache' : 'Annotated by the backend'}
+          {' · '}threshold {formatConfidencePercent(detectionResult.confidence_threshold)}
         </div>
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={onDownloadPng}
+            onClick={onDownloadImage}
             className="btn-lime min-h-[40px] flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold shadow-md"
           >
             <Download className="h-3.5 w-3.5 text-[#0F1419]" />
-            <span>Download PNG</span>
+            <span>Download Image</span>
           </button>
 
           <button
@@ -161,7 +136,7 @@ export default function ResultsDisplay({
             <div className="flex items-center justify-between pt-1">
               <span className="text-[#CCCCCC]">Active Model</span>
               <span className="font-mono text-xs text-white">
-                {detectionResult.modelName || "Farai's FPN-DomainNet"}
+                {detectionResult.model_name}
               </span>
             </div>
           </div>
@@ -173,7 +148,7 @@ export default function ResultsDisplay({
             <span className="text-xs font-semibold uppercase tracking-wider text-[#32FF00]">
               Detection Breakdown by Class
             </span>
-            <span className="text-xs text-[#888888]">Click class to isolate</span>
+            <span className="text-xs text-[#888888]">Click a class to highlight it</span>
           </div>
 
           {Object.keys(detectionResult.detections).length === 0 ? (
@@ -187,7 +162,8 @@ export default function ResultsDisplay({
           ) : (
             <div className="divide-y divide-[#16213E] max-h-72 overflow-y-auto pr-1">
               {(Object.entries(detectionResult.detections) as [string, DetectionScoreBreakdown][]).map(([className, data]) => {
-                const color = getClassColor(className);
+                // Prefer the backend's colour so the badge matches the box drawn in the image.
+                const swatch = data.color || getClassColor(className).hex;
                 const avgConf = data.average_confidence !== undefined
                   ? data.average_confidence
                   : data.confidence_scores.reduce((a: number, b: number) => a + b, 0) / (data.confidence_scores.length || 1);
@@ -209,7 +185,7 @@ export default function ResultsDisplay({
                     <div className="flex items-center gap-3">
                       <span
                         className="h-3 w-3 rounded-full shrink-0 shadow-[0_0_6px_currentColor]"
-                        style={{ backgroundColor: color.hex, color: color.hex }}
+                        style={{ backgroundColor: swatch, color: swatch }}
                       />
                       <div>
                         <span className="text-sm font-semibold text-white">
@@ -247,13 +223,13 @@ export default function ResultsDisplay({
 
           {highlightClass && (
             <div className="pt-2 flex items-center justify-between text-xs text-[#32FF00] bg-[#32FF00]/10 border border-[#32FF00]/30 px-3 py-1.5 rounded-lg">
-              <span>Filtering only "{capitalizeClass(highlightClass)}" detections</span>
+              <span>Highlighting "{capitalizeClass(highlightClass)}"</span>
               <button
                 type="button"
                 onClick={() => onSelectClassFilter(null)}
                 className="text-[#CCCCCC] hover:text-white underline"
               >
-                Reset filter
+                Clear
               </button>
             </div>
           )}

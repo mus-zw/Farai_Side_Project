@@ -30,8 +30,8 @@ A production-grade, authentic portfolio and interactive computer vision suite de
 - **Split Before/After Inspection**: Draggable slider with keyboard support (`←`/`→`) and side-by-side mode.
 - **Dynamic Confidence Filtering**: Smooth slider (0–100%) with dynamic color gradient (`#ef4444` → `#eab308` → `#32FF00`).
 - **Batch Processing Mode**: Sequential processing of multi-image queues with automated packaged `.zip` export and JSON manifest.
-- **Side-by-Side Model Comparison**: Head-to-head benchmarking between Farai's Custom FPN, YOLOv8x, Mask R-CNN, and RetinaNet with speedup and certainty metrics.
-- **Real-Time Video Suite**: Upload video streams up to 500MB, MOT tracking with trajectories, frame scrubber, and dual stream sync comparison.
+- **Side-by-Side Model Comparison**: Head-to-head runs of YOLOv8-seg sizes (Nano to Extra Large) on the same image, with timing, per-class counts and box-level agreement.
+- **Video Suite**: Upload videos up to 500MB, frame-by-frame detection at a chosen stride, box overlay on playback, frame inspector and occurrence timeline.
 - **Persistent Local Gallery**: Quota-safe client-side cache with search, class filtering, and sorting.
 
 ---
@@ -44,9 +44,9 @@ A production-grade, authentic portfolio and interactive computer vision suite de
 - **Single Image Analysis**:
   - Drag-and-drop ingestion (up to 50MB, JPG/PNG/WebP) with real-time streaming progress tracking
   - **Before/After Split Slider**: Draggable comparison slider with keyboard accessibility (arrow keys) and instant toggle to side-by-side mode
-  - **Dynamic Confidence Slider**: Interactive slider (0–100%) with dynamic color gradient (red → yellow → green) and real-time bounding box re-filtering
-  - **Model Architecture Switcher**: Test between Farai's Custom FPN-DomainNet, YOLOv8x Benchmark, Mask R-CNN (ResNet-50-FPN), and RetinaNet Focal Loss
-  - **Class-by-Class Isolation**: Click any detected class to isolate its bounding boxes and mask overlays
+  - **Confidence Slider**: Re-runs detection on the backend at the chosen threshold (red → yellow → green gradient)
+  - **Backend Status**: Live indicator of the served model and device, from `/api/health`
+  - **Class Breakdown**: Per-class counts and confidences, in the same colours as the annotated image
 
 - **High-Throughput Batch Processing**:
   - Drag-and-drop multiple images simultaneously into an asynchronous worker queue
@@ -55,8 +55,8 @@ A production-grade, authentic portfolio and interactive computer vision suite de
 
 - **Multi-Model Side-by-Side Benchmarking**:
   - Select candidate models (Model A vs Model B) to run head-to-head on identical frames
-  - Automated comparative metrics: **Throughput Winner** (+X% speedup), **Certainty Winner**, and **Object Recall** differences
-  - Class-by-class discrepancy breakdown table identifying precision variances
+  - Metrics from `/api/compare`: fastest model, most objects found, highest mean confidence, and agreement (pairwise F1 of matched boxes)
+  - Class-by-class count table across models
 
 - **Analytics Dashboard & Data Export**:
   - Aggregate KPIs: Total images analyzed, average latency in ms, total objects detected, and unique taxonomy classes
@@ -75,22 +75,18 @@ A production-grade, authentic portfolio and interactive computer vision suite de
   - Floating Action Button (FAB) for fast navigation between modes
   - Shortcuts: `Spacebar` (run inference), `S` (download annotated image), `C` (toggle comparison mode), `?` (show shortcuts cheatsheet)
 
-### 2. Real-Time Video Processing Suite (`/demo` Video Tab)
+### 2. Video Processing Suite (`/demo` Video Tab)
 - **High-Capacity Ingestion**: Supports MP4, WebM, MOV, and AVI video streams up to **500MB** with real-time video duration and dimension extraction.
-- **Custom Synthetic Benchmark Generator**: Built-in client-side canvas synthesizer rendering 1080p/720p 24fps traffic benchmark videos on demand for instant testing.
-- **Processing Modes**:
-  - *Full Stream*: Sequential analysis of every frame
-  - *Sampled Frames*: Configurable sampling rate (1–30 FPS) with step progress indicators
-  - *Real-time Stream Overlay*: In-sync HTML5 canvas bounding box overlays
-- **Multi-Object Tracking (MOT)**: Unique entity tracking IDs, trajectory motion history vectors, and velocity vectors.
+- **Sample Video Generator**: Client-side canvas generator for a short synthetic traffic clip to use as *input* when you have no video handy.
+- **Frame Stride**: Analyse every Nth frame (1–60), plus a confidence threshold; both are passed straight to `/api/detect-video`.
+- **No tracking**: detections are per frame; objects carry no identity across frames.
 - **Interactive Video Player**:
   - Variable playback rates (`0.5x`, `1.0x`, `1.5x`, `2.0x`)
-  - Class-specific filter isolation (highlight cars, pedestrians, bikes during playback)
-  - Toggle bounding boxes and motion trails
+  - Backend boxes overlaid on the original video, holding the latest analysed frame between strides
+  - Class filter
 - **Temporal Occurrence Timeline**: Clickable timeline visualizing when specific object classes enter and exit the scene.
-- **Forensic Frame-by-Frame Inspector**: Scrub through video frames with fine step controls, confidence inspection, and PNG snapshot export.
-- **Kinematic & Density Analytics**: Object density bar charts across temporal slices and class frequency breakdown.
-- **Synchronized Dual-Stream Comparison**: Side-by-side synchronized video playback for visual model verification and difference analysis.
+- **Frame Inspector**: Step through the analysed frames and see each box with its confidence.
+- **Density Analytics**: Mean objects per analysed frame across the video, and class frequency breakdown.
 
 ---
 
@@ -121,60 +117,22 @@ The application will be live at `http://localhost:3000`.
 
 ---
 
-## Backend API Integration (Optional)
+## Backend API
 
-The application communicates with a computer vision detection API endpoint via `POST /api/detect` with multipart form data:
+The app needs the FastAPI backend in `cv-backend` (YOLOv8-seg); see its
+`README.md`. It has no offline mode: every detection shown comes from the
+backend, and if the backend is unreachable or errors, the UI shows the error.
 
-- **Default Endpoint**: `http://localhost:8000/api/detect` (or configured via `VITE_API_URL`)
-- **Configurable**: You can change the target endpoint URL directly inside the Demo page UI by clicking **"API Config"**.
-
-### Sample Python FastAPI Backend
-You can launch a companion Python server in seconds:
-
-```python
-# main.py
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.middleware.cors import CORSMiddleware
-import time
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.post("/api/detect")
-async def detect(
-    image: UploadFile = File(...),
-    model_id: str = Form("farai-fpn")
-):
-    start = time.time()
-    contents = await image.read()
-    
-    # Process with your PyTorch / YOLO / Mask R-CNN model here:
-    # results = model(contents, model_id=model_id)
-    
-    return {
-        "total_objects": 6,
-        "detections": {
-            "person": {"count": 2, "confidence_scores": [0.96, 0.92]},
-            "car": {"count": 3, "confidence_scores": [0.97, 0.94, 0.89]},
-            "dog": {"count": 1, "confidence_scores": [0.91]}
-        },
-        "processing_time_ms": int((time.time() - start) * 1000) + 95,
-        "annotated_image_base64": "data:image/png;base64,..."
-    }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-```
-
-> **Note**: The app has no offline mode. Every detection shown comes from the backend; if it is unreachable or returns an error, the UI shows that error.
+- **Base URL**: `VITE_API_URL` (default `http://localhost:8000`), overridable at
+  runtime from **API Config** on the Demo page (stored as a base URL in
+  localStorage).
+- **Calls made**: `POST /api/detect`, `POST /api/compare`,
+  `POST /api/detect-video`, `GET /api/health`, `GET /api/model-info`. Uploads
+  go in the multipart field `file`; options (`confidence`, `models`,
+  `frame_stride`, `return_video`) are query parameters.
+- The full request/response contract is in `docs/CONTRACT_AUDIT.md`. That
+  file is the pre-reconciliation snapshot; the backend's `app/schemas.py` is
+  the source of truth.
 
 ---
 
@@ -186,7 +144,6 @@ if __name__ == "__main__":
 - `src/components/video/VideoTimeline.tsx` - Temporal occurrence and presence timeline
 - `src/components/video/FrameAnalysis.tsx` - Frame-by-frame forensic scrubber and snapshot exporter
 - `src/components/video/VideoAnalytics.tsx` - Density charts, temporal statistics, and JSON export
-- `src/components/video/VideoComparison.tsx` - Synchronized dual-stream video comparison
 - `src/components/BatchUpload.tsx` - Multi-image ingestion, queue runner, and ZIP packaging
 - `src/components/ConfidenceSlider.tsx` - Interactive threshold slider with dynamic color gradient
 - `src/components/BeforeAfterSlider.tsx` - Draggable split slider with keyboard support
@@ -197,6 +154,7 @@ if __name__ == "__main__":
 - `src/components/FloatingActions.tsx` - Floating action navigation button
 - `src/services/visionApi.ts` - Image inference API client (`/api/detect`)
 - `src/services/videoApi.ts` - Video inference API client (`/api/detect-video`)
+- `src/services/systemApi.ts` / `compareApi.ts` - `/api/health`, `/api/model-info`, `/api/compare` clients
 - `src/services/apiClient.ts` - Backend base URL (env + API Config override) and error translation
 - `src/utils/models.ts` - Model architecture registry and characteristics
 - `src/utils/galleryStorage.ts` - Quota-safe compressed thumbnailing and LRU pruning

@@ -13,8 +13,8 @@ import {
   Sparkles,
   Filter,
 } from 'lucide-react';
-import { VideoDetectionResponse, FrameDetection, VideoTrackedObject } from '../../types';
-import { getClassColor } from '../../utils/colors';
+import { VideoDetectionResponse, VideoBox } from '../../types';
+import { frameIndexAtTime } from '../../utils/videoFrames';
 import { capitalizeClass } from '../../utils/formatters';
 
 interface VideoPlayerProps {
@@ -37,14 +37,10 @@ export default function VideoPlayer({
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
   const [currentFrameNumber, setCurrentFrameNumber] = useState<number>(0);
-  const [currentDetections, setCurrentDetections] = useState<VideoTrackedObject[]>([]);
+  const [currentDetections, setCurrentDetections] = useState<VideoBox[]>([]);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
   const [isMuted, setIsMuted] = useState<boolean>(true);
-  const [showMasks, setShowMasks] = useState<boolean>(true);
-  const [showTrails, setShowTrails] = useState<boolean>(true);
   const [selectedClassFilter, setSelectedClassFilter] = useState<string | null>(filterClass);
-
-  const fps = detectionData?.fps || 24;
 
   // Draw overlay bounding boxes and trajectories onto canvas
   const renderOverlay = useCallback(
@@ -68,12 +64,9 @@ export default function VideoPlayer({
         return;
       }
 
-      // Find closest frame by timestamp
-      const frameIdx = Math.min(
-        detectionData.frame_detections.length - 1,
-        Math.max(0, Math.floor(timestamp * fps))
-      );
-      const frame = detectionData.frame_detections[frameIdx];
+      // Only every frame_stride-th frame was analysed; show the most recent
+      // analysed frame at or before the playback position.
+      const frame = detectionData.frame_detections[frameIndexAtTime(detectionData.frame_detections, timestamp)];
 
       if (!frame || !frame.boxes) return;
 
@@ -91,43 +84,14 @@ export default function VideoPlayer({
       const width = canvas.width;
       const height = canvas.height;
 
-      // 1. Draw trajectory paths
-      if (showTrails) {
-        for (const box of boxes) {
-          if (box.trajectory && box.trajectory.length > 1) {
-            ctx.save();
-            ctx.strokeStyle = box.color;
-            ctx.lineWidth = Math.max(2, Math.round(width * 0.003));
-            ctx.setLineDash([4, 4]);
-            ctx.beginPath();
-            ctx.moveTo(box.trajectory[0][0] * width, box.trajectory[0][1] * height);
-            for (let i = 1; i < box.trajectory.length; i++) {
-              ctx.lineTo(box.trajectory[i][0] * width, box.trajectory[i][1] * height);
-            }
-            ctx.stroke();
-            ctx.restore();
-          }
-        }
-      }
-
-      // 2. Draw masks and bounding boxes
+      // Draw bounding boxes in the backend's per-class colours.
       for (const box of boxes) {
         const [nx, ny, nw, nh] = box.bbox;
         const bx = nx * width;
         const by = ny * height;
         const bw = nw * width;
         const bh = nh * height;
-        const color = getClassColor(box.className);
-
-        // Instance Mask
-        if (showMasks) {
-          ctx.save();
-          ctx.fillStyle = `rgba(${color.rgb}, 0.25)`;
-          ctx.beginPath();
-          ctx.roundRect(bx, by, bw, bh, 6);
-          ctx.fill();
-          ctx.restore();
-        }
+        const color = { hex: box.color };
 
         // Bounding Box
         ctx.save();
@@ -145,11 +109,11 @@ export default function VideoPlayer({
         ctx.lineTo(bx + notch, by);
         ctx.stroke();
 
-        // Label Badge with ID Tracking
+        // Label badge
         const fontSize = Math.max(11, Math.min(16, Math.round(width * 0.016)));
         ctx.font = `600 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
 
-        const labelText = `#${box.trackId} ${box.className.toUpperCase()} ${(box.confidence * 100).toFixed(0)}%`;
+        const labelText = `${box.className.toUpperCase()} ${(box.confidence * 100).toFixed(0)}%`;
         const textMetrics = ctx.measureText(labelText);
         const textW = textMetrics.width;
         const textH = fontSize * 1.3;
@@ -170,7 +134,7 @@ export default function VideoPlayer({
         ctx.restore();
       }
     },
-    [detectionData, fps, onFrameChange, selectedClassFilter, showMasks, showTrails]
+    [detectionData, onFrameChange, selectedClassFilter]
   );
 
   // Animation frame loop synchronized with video playback
@@ -371,26 +335,6 @@ export default function VideoPlayer({
 
         {/* Toggles & Filters */}
         <div className="flex flex-wrap items-center gap-4 text-xs text-neutral-300">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showMasks}
-              onChange={(e) => setShowMasks(e.target.checked)}
-              className="rounded border-neutral-700 bg-neutral-800 text-[#32FF00] focus:ring-[#32FF00]"
-            />
-            <span>Masks</span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showTrails}
-              onChange={(e) => setShowTrails(e.target.checked)}
-              className="rounded border-neutral-700 bg-neutral-800 text-[#32FF00] focus:ring-[#32FF00]"
-            />
-            <span>Trajectories</span>
-          </label>
-
           {/* Class Filter Dropdown */}
           <div className="flex items-center gap-1.5">
             <Filter className="h-3.5 w-3.5 text-neutral-400" />

@@ -58,7 +58,7 @@ export default function Analytics({ galleryItems, onNotify }: AnalyticsProps) {
       `"${item.title.replace(/"/g, '""')}"`,
       item.totalObjects,
       item.processingTimeMs,
-      item.modelName || 'Farai FPN',
+      item.modelName || 'unknown',
       `"${item.topClasses.map((c) => `${c.name}:${c.count}`).join(';')}"`,
     ]);
 
@@ -260,7 +260,7 @@ export default function Analytics({ galleryItems, onNotify }: AnalyticsProps) {
                     {item.title}
                   </td>
                   <td className="py-2.5 font-sans text-neutral-400">
-                    {item.modelName || "Farai's FPN-DomainNet"}
+                    {item.modelName || 'unknown'}
                   </td>
                   <td className="py-2.5 text-neutral-300 tabular-nums">
                     {item.totalObjects} objs
