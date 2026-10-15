@@ -6,3 +6,10 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Backend artefacts, in case cv-backend is ever combined with this repo
+venv/
+.venv/
+__pycache__/
+*.pt
+logs/
