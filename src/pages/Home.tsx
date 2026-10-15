@@ -239,7 +239,7 @@ export default function Home() {
 
             {/* Tags */}
             <div className="flex flex-wrap gap-2 pt-2">
-              {['React', 'FastAPI', 'Real-time Inference', 'Video Suite', 'Client-side Fallback'].map((t) => (
+              {['React', 'FastAPI', 'Real-time Inference', 'Video Suite', 'Model Comparison'].map((t) => (
                 <span
                   key={t}
                   className="rounded-lg border border-[#16213E] bg-[#0F1419] px-2.5 py-1 text-xs font-mono text-[#CCCCCC]"
