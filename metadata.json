@@ -1,0 +1,6 @@
+{
+  "name": "Farai Bodias Musariri — Computer Vision & AI",
+  "description": "Portfolio and interactive multi-class object detection, segmentation, and classification demos by Farai Bodias Musariri, MSc Computer Science candidate at Rhodes University.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
