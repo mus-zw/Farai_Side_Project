@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -22,7 +21,6 @@ import { SAMPLE_IMAGES } from '../utils/sampleData';
 import SkillsSection from '../components/SkillsSection';
 
 export default function Home() {
-  const [sliderPosition, setSliderPosition] = useState(50);
   const sample = SAMPLE_IMAGES[0]; // African Penguin Colony flagship sample
 
   return (
@@ -89,101 +87,36 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Hero Right: Interactive Split Inspection with African Penguin Sample */}
+          {/* Hero Right: sample input image. No overlay is drawn here: the
+              only detections this site shows are ones the backend returns. */}
           <div className="lg:col-span-5">
             <div className="relative rounded-2xl border border-[#16213E] bg-[#16213E]/70 p-4 shadow-2xl backdrop-blur-sm lime-border-hover">
               <div className="flex items-center justify-between pb-3 text-xs">
                 <span className="font-semibold text-white flex items-center gap-1.5">
                   <ScanLine className="h-4 w-4 text-[#32FF00]" />
-                  Live Small-Object Detection
+                  Sample Input
                 </span>
                 <span className="text-[#32FF00] font-mono text-[11px] bg-[#32FF00]/10 px-2 py-0.5 rounded-full border border-[#32FF00]/30">
-                  African Penguin Colony (~20px)
+                  African Penguin Colony
                 </span>
               </div>
 
-              {/* Interactive Split Comparison */}
-              <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-xl border border-[#16213E] select-none bg-[#0F1419]">
-                {/* Annotated layer */}
-                <div className="absolute inset-0">
-                  <img
-                    src={sample.dataUrl}
-                    alt="African penguin colony aerial view"
-                    className="h-full w-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  {/* Bounding box overlays */}
-                  {sample.boxes.map((box) => (
-                    <div
-                      key={box.id}
-                      className="absolute border-2 transition-transform"
-                      style={{
-                        left: `${box.bbox[0] * 100}%`,
-                        top: `${box.bbox[1] * 100}%`,
-                        width: `${box.bbox[2] * 100}%`,
-                        height: `${box.bbox[3] * 100}%`,
-                        borderColor: '#32FF00',
-                        backgroundColor: 'rgba(50, 255, 0, 0.18)',
-                        boxShadow: '0 0 8px rgba(50, 255, 0, 0.4)',
-                      }}
-                    >
-                      <span className="absolute -top-4 left-0 rounded bg-[#0F1419] border border-[#32FF00] px-1 text-[9px] font-bold text-[#32FF00] font-mono whitespace-nowrap">
-                        {box.className} {Math.round(box.confidence * 100)}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Original raw image clipped by slider using pixel-perfect clipPath */}
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
-                >
-                  <img
-                    src={sample.dataUrl}
-                    alt="Raw aerial survey"
-                    className="h-full w-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-
-                {/* Vertical Divider Line */}
-                <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-[#32FF00] shadow-[0_0_12px_#32FF00] pointer-events-none"
-                  style={{ left: `${sliderPosition}%` }}
-                >
-                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 h-7 w-7 rounded-full bg-[#0F1419] border-2 border-[#32FF00] flex items-center justify-center text-[#32FF00] shadow-[0_0_15px_rgba(50,255,0,0.6)]">
-                    <span className="text-[10px] font-bold">⇄</span>
-                  </div>
-                </div>
-
-                {/* Interactive range slider controller */}
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={sliderPosition}
-                  onChange={(e) => setSliderPosition(Number(e.target.value))}
-                  aria-label="Comparison slider position"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize z-20"
+              <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-xl border border-[#16213E] bg-[#0F1419]">
+                <img
+                  src={sample.dataUrl}
+                  alt="African penguin colony aerial view"
+                  className="h-full w-full object-cover"
+                  referrerPolicy="no-referrer"
                 />
-
-                {/* Labels */}
-                <div className="absolute top-2 left-2 rounded-md bg-[#0F1419]/90 border border-[#16213E] px-2 py-0.5 text-[10px] font-mono text-[#CCCCCC]">
-                  Raw Frame
-                </div>
-                <div className="absolute top-2 right-2 rounded-md bg-[#0F1419]/90 border border-[#32FF00]/50 px-2 py-0.5 text-[10px] font-mono text-[#32FF00]">
-                  YOLOv8 Detection (12 micro-targets)
-                </div>
               </div>
 
               <div className="mt-3 flex items-center justify-between text-xs text-[#CCCCCC]">
-                <span>Drag slider left/right to reveal bounding boxes</span>
+                <span>Run this image through the live model</span>
                 <Link
-                  to="/demo"
+                  to={`/demo?sample=${sample.id}`}
                   className="text-xs font-semibold text-[#32FF00] hover:underline flex items-center gap-1"
                 >
-                  <span>Open Full Suite</span>
+                  <span>Analyze in Demo</span>
                   <ArrowRight className="h-3 w-3" />
                 </Link>
               </div>

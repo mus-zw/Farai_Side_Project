@@ -67,9 +67,6 @@ export interface SampleImageOption {
   description: string;
   category: string;
   dataUrl: string;
-  expectedObjects: number;
-  mockDetections: Record<string, DetectionScoreBreakdown>;
-  boxes: BoundingBox[];
   metadata: {
     width: number;
     height: number;
@@ -171,7 +168,6 @@ export interface VideoDetectionResponse {
   frame_detections: FrameDetection[];
   summary: VideoSummary;
   processing_time_ms?: number;
-  source?: 'live_backend' | 'client_engine';
 }
 
 export interface VideoProcessingOptions {

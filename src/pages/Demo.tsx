@@ -19,11 +19,10 @@ import {
 import {
   detectObjects,
   VisionDetectionResult,
-  getBackendEndpoint,
-  setBackendEndpoint,
   validateAndExtractImageMetadata,
   AnalysisOptions,
 } from '../services/visionApi';
+import { getApiBaseUrl, setApiBaseUrl } from '../services/apiClient';
 import { SAMPLE_IMAGES } from '../utils/sampleData';
 import { VISION_MODELS, MODEL_LIST } from '../utils/models';
 import {
@@ -81,7 +80,7 @@ export default function Demo({ onNotify }: DemoProps) {
   // Modals & Gallery
   const [fullscreenImage, setFullscreenImage] = useState<{ src: string; title: string } | null>(null);
   const [showBackendModal, setShowBackendModal] = useState<boolean>(false);
-  const [endpointInput, setEndpointInput] = useState<string>(getBackendEndpoint());
+  const [endpointInput, setEndpointInput] = useState<string>(getApiBaseUrl());
   const [sampleModalOpen, setSampleModalOpen] = useState<boolean>(false);
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<GalleryItem | null>(null);
   const [confirmClearGalleryOpen, setConfirmClearGalleryOpen] = useState<boolean>(false);
@@ -93,41 +92,14 @@ export default function Demo({ onNotify }: DemoProps) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const activeObjectUrlRef = useRef<string | null>(null);
 
-  // Initialize Gallery & seed if needed
+  // Initialize Gallery
   useEffect(() => {
-    const loaded = loadGallery();
-    if (loaded.length > 0) {
-      setGallery(loaded);
-    } else {
-      const sample = SAMPLE_IMAGES[0];
-      const initialItem: GalleryItem = {
-        id: 'seed-penguin-demo',
-        timestamp: Date.now() - 3600000 * 2,
-        title: sample.title,
-        originalImage: sample.dataUrl,
-        annotatedImage: sample.dataUrl,
-        thumbnailImage: sample.dataUrl,
-        totalObjects: 12,
-        processingTimeMs: 142,
-        detections: sample.mockDetections,
-        topClasses: [
-          { name: 'penguin', count: 12 },
-        ],
-        modelId: 'farai-fpn',
-        modelName: "Farai's FPN-DomainNet",
-        thresholdUsed: 0.5,
-        metadata: {
-          width: sample.metadata.width,
-          height: sample.metadata.height,
-          sizeBytes: sample.metadata.sizeBytes,
-          sizeFormatted: sample.metadata.sizeFormatted,
-          format: sample.metadata.format,
-          name: 'boulders_beach_colony.jpg',
-        },
-      };
-      setGallery([initialItem]);
-      saveGallery([initialItem]);
-    }
+    // Earlier builds seeded a fabricated penguin result into the gallery;
+    // drop it from any browser that still has it stored.
+    const stored = loadGallery();
+    const loaded = stored.filter((g) => g.id !== 'seed-penguin-demo');
+    if (loaded.length !== stored.length) saveGallery(loaded);
+    setGallery(loaded);
 
     return () => {
       if (activeObjectUrlRef.current && activeObjectUrlRef.current.startsWith('blob:')) {
@@ -168,9 +140,6 @@ export default function Demo({ onNotify }: DemoProps) {
 
       const options: AnalysisOptions = {
         confidenceThreshold,
-        showMasks,
-        showLabels,
-        activeFilterClass: highlightClass,
         modelId: selectedModel,
         signal: abortControllerRef.current.signal,
         onProgress: (p) => {
@@ -179,21 +148,13 @@ export default function Demo({ onNotify }: DemoProps) {
         },
       };
 
-      const result = await detectObjects(fileOrBlob, previewUrl, sampleId, options, meta);
+      const result = await detectObjects(fileOrBlob, options, meta);
 
       setDetectionResult(result);
       setStatus('complete');
       setUploadProgress(100);
 
-      if (result.source === 'live_backend') {
-        onNotify('success', `Detected ${result.total_objects} objects via live backend in ${result.processing_time_ms}ms!`);
-      } else {
-        if (result.backendError) {
-          onNotify('info', `FastAPI backend unavailable (${result.backendError}). Analyzed with local client engine.`);
-        } else {
-          onNotify('success', `Analyzed ${result.total_objects} objects in ${result.processing_time_ms}ms.`);
-        }
-      }
+      onNotify('success', `Detected ${result.total_objects} objects in ${result.processing_time_ms}ms.`);
 
       // Generate lightweight thumbnail for gallery storage safety
       const thumbnail = await createThumbnail(result.annotated_image_base64 || previewUrl, 320);
@@ -252,22 +213,17 @@ export default function Demo({ onNotify }: DemoProps) {
     try {
       const options: AnalysisOptions = {
         confidenceThreshold: threshold,
-        showMasks: masks,
-        showLabels: labels,
-        activeFilterClass: highlight,
         modelId: model,
       };
 
-      const result = await detectObjects(
-        currentFile,
-        originalImageUrl,
-        activeSampleId || undefined,
-        options,
-        imageMetadata || undefined
-      );
+      const result = await detectObjects(currentFile, options, imageMetadata || undefined);
       setDetectionResult(result);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to recompute annotations:', err);
+      const msg = err?.message || 'Failed to re-run detection.';
+      setStatus('error');
+      setErrorMessage(msg);
+      onNotify('error', msg);
     }
   };
 
@@ -314,7 +270,8 @@ export default function Demo({ onNotify }: DemoProps) {
     fetch(sample.dataUrl)
       .then((res) => res.blob())
       .then((blob) => {
-        const file = new File([blob], `${sample.id}.png`, { type: 'image/png' });
+        const ext = blob.type === 'image/png' ? 'png' : 'jpg';
+        const file = new File([blob], `${sample.id}.${ext}`, { type: blob.type || 'image/jpeg' });
         setCurrentFile(file);
         processImage(file, sample.dataUrl, sample.id, sample.title, meta);
       })
@@ -391,7 +348,6 @@ export default function Demo({ onNotify }: DemoProps) {
       detections: item.detections,
       processing_time_ms: item.processingTimeMs,
       annotated_image_base64: item.annotatedImage,
-      source: 'client_engine',
       modelId: item.modelId,
       modelName: item.modelName,
     });
@@ -419,7 +375,6 @@ export default function Demo({ onNotify }: DemoProps) {
       engineer: 'Farai Bodias Musariri',
       timestamp: new Date().toISOString(),
       model: detectionResult.modelName || selectedModel,
-      source: detectionResult.source,
       processing_time_ms: detectionResult.processing_time_ms,
       total_objects: detectionResult.total_objects,
       detections: detectionResult.detections,
@@ -769,9 +724,7 @@ export default function Demo({ onNotify }: DemoProps) {
               showMasks={showMasks}
               showLabels={showLabels}
               highlightClass={highlightClass}
-              totalCandidateBoxes={
-                detectionResult.rawBoxes ? detectionResult.rawBoxes.length : detectionResult.total_objects
-              }
+              totalCandidateBoxes={detectionResult.total_objects}
               onThresholdChange={(t) => {
                 setConfidenceThreshold(t);
                 handleOptionChange(t, undefined, undefined, undefined);
@@ -952,7 +905,7 @@ export default function Demo({ onNotify }: DemoProps) {
                       {sample.description}
                     </p>
                     <div className="pt-1 text-[10px] text-[#32FF00] font-medium">
-                      ~{sample.expectedObjects} objects · {sample.category}
+                      {sample.category}
                     </div>
                   </div>
                 </div>
@@ -992,7 +945,7 @@ export default function Demo({ onNotify }: DemoProps) {
                   htmlFor="endpoint-input"
                   className="block text-xs font-semibold uppercase tracking-wider text-neutral-300 mb-1"
                 >
-                  Detection Endpoint URL
+                  Backend Base URL
                 </label>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <input
@@ -1001,14 +954,15 @@ export default function Demo({ onNotify }: DemoProps) {
                     value={endpointInput}
                     onChange={(e) => setEndpointInput(e.target.value)}
                     className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-xs font-mono text-white focus:border-[#32FF00] focus:outline-none"
-                    placeholder="http://localhost:8000/api/detect"
+                    placeholder="http://localhost:8000"
                   />
                   <button
                     type="button"
                     onClick={() => {
-                      setBackendEndpoint(endpointInput);
+                      setApiBaseUrl(endpointInput);
+                      setEndpointInput(getApiBaseUrl());
                       setShowBackendModal(false);
-                      onNotify('success', `Saved endpoint: ${endpointInput}`);
+                      onNotify('success', `Saved backend URL: ${getApiBaseUrl()}`);
                     }}
                     className="min-h-[44px] rounded-lg bg-[#32FF00] px-4 py-2 text-xs font-semibold text-neutral-950 hover:bg-[#00FF41] shrink-0"
                   >
@@ -1018,9 +972,9 @@ export default function Demo({ onNotify }: DemoProps) {
               </div>
 
               <div className="rounded-lg bg-neutral-950/80 border border-neutral-800 p-3 text-xs text-neutral-400">
-                <p className="font-semibold text-neutral-200">Zero-Config Standalone Operation:</p>
+                <p className="font-semibold text-neutral-200">All results come from this backend.</p>
                 <p className="mt-0.5">
-                  When the local FastAPI server is not running or CORS restricts direct browser calls, the app automatically switches to the built-in browser-based computer vision engine, allowing visitors to test uploads, bounding boxes, segmentation masks, and latency measurements without having to launch any terminal commands.
+                  Image, video and comparison requests are sent to <code>{'{base}'}/api/...</code>. If the backend is unreachable or returns an error, the request fails and the error is shown; there is no offline simulation.
                 </p>
               </div>
             </div>

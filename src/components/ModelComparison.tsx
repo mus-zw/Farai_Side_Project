@@ -40,28 +40,14 @@ export default function ModelComparison({
       // 1. Run Model A
       const resA = await detectObjects(
         currentFile,
-        originalImageUrl,
-        activeSampleId || undefined,
-        {
-          modelId: modelAId,
-          confidenceThreshold,
-          showMasks: true,
-          showLabels: true,
-        },
+        { modelId: modelAId, confidenceThreshold },
         imageMetadata || undefined
       );
 
       // 2. Run Model B
       const resB = await detectObjects(
         currentFile,
-        originalImageUrl,
-        activeSampleId || undefined,
-        {
-          modelId: modelBId,
-          confidenceThreshold,
-          showMasks: true,
-          showLabels: true,
-        },
+        { modelId: modelBId, confidenceThreshold },
         imageMetadata || undefined
       );
 

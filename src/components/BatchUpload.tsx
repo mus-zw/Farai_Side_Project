@@ -105,13 +105,9 @@ export default function BatchUpload({
       try {
         const result = await detectObjects(
           item.file,
-          item.previewUrl,
-          undefined,
           {
             modelId,
             confidenceThreshold,
-            showMasks: true,
-            showLabels: true,
             onProgress: (p) => {
               setItems((prev) =>
                 prev.map((it, i) => (i === idx ? { ...it, progress: Math.min(95, p) } : it))

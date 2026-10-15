@@ -1,16 +1,12 @@
 import axios, { AxiosProgressEvent } from 'axios';
-import {
-  VideoDetectionResponse,
-  VideoProcessingOptions,
-  VideoMetadata,
-} from '../types';
+import { VideoDetectionResponse, VideoProcessingOptions, VideoMetadata } from '../types';
 import { formatBytes } from '../utils/formatters';
-import { generateSyntheticFrameDetections } from '../utils/sampleVideo';
-
-const ENV_BACKEND_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
-const DEFAULT_VIDEO_ENDPOINT = `${ENV_BACKEND_URL.replace(/\/+$/, '')}/api/detect-video`;
+import { apiUrl, toApiError } from './apiClient';
 
 export const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024; // 500MB
+// Video runs every analysed frame through the model in one synchronous
+// request, so minutes are normal for longer clips.
+export const VIDEO_REQUEST_TIMEOUT_MS = 600_000;
 
 /**
  * Validates and extracts duration, width, height, and file metadata for video uploads.
@@ -64,31 +60,31 @@ export async function validateAndExtractVideoMetadata(file: File): Promise<Video
 }
 
 /**
- * Sends a video file to the backend detection endpoint `http://localhost:8000/api/detect-video`.
- * Falls back to client-side video processing if backend is offline.
+ * Sends a video to the backend's /api/detect-video endpoint.
+ *
+ * Failures are thrown, never replaced with synthetic tracks: fabricated video
+ * detections are indistinguishable from real ones once rendered.
  */
 export async function processVideo(
   videoFile: File | Blob,
-  videoMetadata: VideoMetadata,
   options: VideoProcessingOptions
 ): Promise<VideoDetectionResponse> {
+  const endpoint = apiUrl('/api/detect-video');
   const startTime = performance.now();
 
-  try {
-    const formData = new FormData();
-    formData.append('video', videoFile);
-    formData.append('file', videoFile);
-    formData.append('mode', options.mode);
-    formData.append('sampling_fps', String(options.samplingFps));
-    formData.append('confidence_threshold', String(options.confidenceThreshold));
-    formData.append('model_id', options.modelId);
-    formData.append('enable_tracking', String(options.enableTracking));
+  // The backend's UploadFile parameter is named `file`.
+  const formData = new FormData();
+  formData.append('file', videoFile);
+  formData.append('mode', options.mode);
+  formData.append('sampling_fps', String(options.samplingFps));
+  formData.append('confidence_threshold', String(options.confidenceThreshold));
+  formData.append('model_id', options.modelId);
+  formData.append('enable_tracking', String(options.enableTracking));
 
-    const response = await axios.post<VideoDetectionResponse>(DEFAULT_VIDEO_ENDPOINT, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      timeout: 30000,
+  let response;
+  try {
+    response = await axios.post<VideoDetectionResponse>(endpoint, formData, {
+      timeout: VIDEO_REQUEST_TIMEOUT_MS,
       signal: options.signal,
       onUploadProgress: (progressEvent: AxiosProgressEvent) => {
         if (progressEvent.total && options.onProgress) {
@@ -97,49 +93,16 @@ export async function processVideo(
         }
       },
     });
-
-    if (response.data && response.data.frame_detections) {
-      return {
-        ...response.data,
-        source: 'live_backend',
-        processing_time_ms: Math.round(performance.now() - startTime),
-      };
-    }
-  } catch (err: any) {
-    console.info(
-      `[Video Pipeline] Backend at ${DEFAULT_VIDEO_ENDPOINT} unreachable (${err?.message}). Running in-browser client video processing engine.`
-    );
+  } catch (err) {
+    throw toApiError(err, endpoint, VIDEO_REQUEST_TIMEOUT_MS);
   }
 
-  // Graceful client-side video processing simulation
-  return runClientSideVideoProcessing(videoMetadata, options, startTime);
-}
-
-/**
- * High-performance in-browser client video detection engine.
- * Emulates frame-by-frame feature extraction, multi-object tracking, and trajectory history.
- */
-async function runClientSideVideoProcessing(
-  metadata: VideoMetadata,
-  options: VideoProcessingOptions,
-  startTime: number
-): Promise<VideoDetectionResponse> {
-  const fps = options.mode === 'sample' ? Math.min(15, options.samplingFps) : 24;
-  const duration = Math.min(30, metadata.durationSeconds > 0 ? metadata.durationSeconds : 10);
-  const totalFrames = Math.max(1, Math.round(duration * fps));
-
-  // Simulate progress updates
-  for (let i = 0; i <= totalFrames; i += Math.max(1, Math.round(totalFrames / 10))) {
-    if (options.onProgress) {
-      const pct = Math.round((i / totalFrames) * 100);
-      options.onProgress(i, totalFrames, pct);
-      await new Promise((r) => setTimeout(r, 40));
-    }
+  if (!response.data || !Array.isArray(response.data.frame_detections)) {
+    throw new Error(`Unexpected response from ${endpoint}: missing frame_detections.`);
   }
 
-  const result = generateSyntheticFrameDetections(duration, fps);
-  result.processing_time_ms = Math.round(performance.now() - startTime);
-  result.source = 'client_engine';
-
-  return result;
+  return {
+    ...response.data,
+    processing_time_ms: Math.round(performance.now() - startTime),
+  };
 }

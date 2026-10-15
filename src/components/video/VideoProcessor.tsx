@@ -60,7 +60,7 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
     setProcessingProgress({ processed: 0, total: 100, percent: 0 });
 
     try {
-      const result = await processVideo(videoFile, videoMetadata, {
+      const result = await processVideo(videoFile, {
         ...options,
         onProgress: (processed, total, percent) => {
           setProcessingProgress({ processed, total, percent });

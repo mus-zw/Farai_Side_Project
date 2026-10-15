@@ -174,7 +174,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
-> **Note**: If no external server is running, the app automatically runs an in-browser high-precision computer vision inference engine using the HTML5 Canvas API, allowing instant exploration with zero configuration.
+> **Note**: The app has no offline mode. Every detection shown comes from the backend; if it is unreachable or returns an error, the UI shows that error.
 
 ---
 
@@ -195,8 +195,9 @@ if __name__ == "__main__":
 - `src/components/Analytics.tsx` - Aggregate KPI metrics, class frequency chart, and CSV/JSON export
 - `src/components/Gallery.tsx` - Client-side search, filtering, and sorting
 - `src/components/FloatingActions.tsx` - Floating action navigation button
-- `src/services/visionApi.ts` - Image inference API service with client engine fallback
-- `src/services/videoApi.ts` - Video detection API service with client engine fallback
+- `src/services/visionApi.ts` - Image inference API client (`/api/detect`)
+- `src/services/videoApi.ts` - Video inference API client (`/api/detect-video`)
+- `src/services/apiClient.ts` - Backend base URL (env + API Config override) and error translation
 - `src/utils/models.ts` - Model architecture registry and characteristics
 - `src/utils/galleryStorage.ts` - Quota-safe compressed thumbnailing and LRU pruning
 
