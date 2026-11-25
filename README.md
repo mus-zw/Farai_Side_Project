@@ -166,6 +166,6 @@ backend, and if the backend is unreachable or errors, the UI shows the error.
 ## 📬 Contact & Inquiries
 - **Email**: [fbmfari@gmail.com](mailto:fbmfari@gmail.com)
 - **LinkedIn**: [linkedin.com/in/farai-musariri](https://linkedin.com/in/farai-musariri)
-- **GitHub**: [github.com/farai-musariri](https://github.com/farai-musariri)
+- **GitHub**: [github.com/mus-zw/Farai_Side_Project](https://github.com/mus-zw/Farai_Side_Project)
 - **Location**: Kempton Park, South Africa
 

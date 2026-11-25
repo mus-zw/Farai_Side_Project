@@ -83,13 +83,13 @@ export default function Footer() {
                 <span>fbmfari@gmail.com</span>
               </a>
               <a
-                href="https://github.com/farai-musariri"
+                href="https://github.com/mus-zw/Farai_Side_Project"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-[#CCCCCC] hover:text-[#32FF00] transition-colors py-1"
               >
                 <Github className="h-4 w-4 text-[#32FF00]" />
-                <span>github.com/farai-musariri</span>
+                <span>github.com/mus-zw/Farai_Side_Project</span>
               </a>
               <a
                 href="https://linkedin.com/in/farai-musariri"

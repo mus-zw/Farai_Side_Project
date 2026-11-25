@@ -194,12 +194,12 @@ export default function Contact({ onNotify }: ContactProps) {
                   </span>
                   <div>
                     <a
-                      href="https://github.com/farai-musariri"
+                      href="https://github.com/mus-zw/Farai_Side_Project"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-mono text-white hover:text-[#32FF00] transition-colors"
                     >
-                      github.com/farai-musariri
+                      github.com/mus-zw/Farai_Side_Project
                     </a>
                   </div>
                   <div className="text-[11px] text-[#888888]">Open-source prototypes and experiments</div>
