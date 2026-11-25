@@ -14,6 +14,13 @@ export const MAX_VIDEO_SIZE_BYTES = 500 * 1024 * 1024; // 500MB
 // request, so minutes are normal for longer clips.
 export const VIDEO_REQUEST_TIMEOUT_MS = 600_000;
 
+// "Clean up busy scenes". Run the model at the user's (low) confidence, then
+// drop objects whose best score never reaches CLEANUP_TRACK_CONFIDENCE (their
+// weaker frames are kept when it does, so real boxes don't blink) and
+// detections seen in only one analysed frame unless they score 60%+.
+export const CLEANUP_TRACK_CONFIDENCE = 0.5;
+export const CLEANUP_MIN_PERSISTENCE = 2;
+
 /**
  * Validates and extracts duration, width, height, and file metadata for video uploads.
  */
@@ -89,6 +96,12 @@ export async function processVideo(
       params: {
         confidence: options.confidenceThreshold,
         frame_stride: options.frameStride,
+        ...(options.cleanUp !== false
+          ? {
+              min_track_confidence: CLEANUP_TRACK_CONFIDENCE,
+              min_persistence: CLEANUP_MIN_PERSISTENCE,
+            }
+          : {}),
         // The UI overlays boxes on the original video, so skip building and
         // base64-encoding an annotated copy nobody reads.
         return_video: false,

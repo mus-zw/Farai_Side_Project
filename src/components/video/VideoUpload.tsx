@@ -44,6 +44,7 @@ export default function VideoUpload({
   // Defaults match the backend's DEFAULT_FRAME_STRIDE (5) and CONFIDENCE_THRESHOLD (0.25).
   const [frameStride, setFrameStride] = useState<number>(5);
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.25);
+  const [cleanUp, setCleanUp] = useState<boolean>(true);
   const [isGeneratingSample, setIsGeneratingSample] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,7 +97,7 @@ export default function VideoUpload({
       return;
     }
 
-    onStartProcessing({ frameStride, confidenceThreshold });
+    onStartProcessing({ frameStride, confidenceThreshold, cleanUp });
   };
 
   return (
@@ -292,6 +293,25 @@ export default function VideoUpload({
               </p>
             </div>
           </div>
+
+          {/* Busy-scene clean-up */}
+          <label className="flex items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-950/60 p-3 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={cleanUp}
+              onChange={(e) => setCleanUp(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-[#32FF00]"
+              data-testid="cleanup-toggle"
+            />
+            <span className="space-y-0.5">
+              <span className="block font-semibold text-neutral-200">Clean up busy scenes</span>
+              <span className="block text-[11px] leading-relaxed text-neutral-500">
+                Drops objects that are never confidently detected and one-frame flicker, but keeps the
+                weaker frames of objects that are, so real boxes don&apos;t blink. Tiny or weak boxes
+                also get no label. Turn off to see every raw detection.
+              </span>
+            </span>
+          </label>
         </form>
       )}
     </div>

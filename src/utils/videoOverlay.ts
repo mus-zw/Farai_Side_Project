@@ -218,3 +218,30 @@ export function readableTextColor(hex: string): '#0b1020' | '#ffffff' {
   const lum = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
   return lum > 0.35 ? '#0b1020' : '#ffffff';
 }
+
+// --- Thinning a busy overlay ---------------------------------------------------
+
+/** Boxes below this confidence are drawn lighter and get no label unless their class is isolated. */
+export const WEAK_CONFIDENCE = 0.4;
+/** Screen-pixel size under which a label would cover more than the box it names. */
+export const MIN_LABEL_BOX_PX = { w: 36, h: 24 };
+
+/**
+ * Whether a box gets a text label. In a busy scene a label on every tiny or
+ * weak box buries the picture. When the user has isolated one class (the
+ * pills), every visible box is labelled: there is no clutter left to thin.
+ */
+export function shouldDrawLabel(
+  screenW: number,
+  screenH: number,
+  confidence: number,
+  classIsolated: boolean
+): boolean {
+  if (classIsolated) return true;
+  return screenW >= MIN_LABEL_BOX_PX.w && screenH >= MIN_LABEL_BOX_PX.h && confidence >= WEAK_CONFIDENCE;
+}
+
+/** Opacity multiplier for a box: weak detections are present but quieter. */
+export function weakBoxOpacity(confidence: number): number {
+  return confidence < WEAK_CONFIDENCE ? 0.55 : 1;
+}

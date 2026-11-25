@@ -8,6 +8,8 @@ import {
   overlayAtTime,
   playbackFrameNumber,
   readableTextColor,
+  shouldDrawLabel,
+  weakBoxOpacity,
 } from '../../utils/videoOverlay';
 import { capitalizeClass } from '../../utils/formatters';
 
@@ -131,10 +133,16 @@ export default function VideoPlayer({
         if (w <= 0 || h <= 0) continue;
 
         ctx.save();
-        ctx.globalAlpha = box.alpha;
+        ctx.globalAlpha = box.alpha * weakBoxOpacity(box.confidence);
         ctx.strokeStyle = box.color;
         ctx.lineWidth = px(LINE_PX);
         ctx.strokeRect(x, y, w, h);
+
+        // Busy scene: no label on tiny or weak boxes (unless one class is isolated).
+        if (!shouldDrawLabel(w * scale, h * scale, box.confidence, filter !== null)) {
+          ctx.restore();
+          continue;
+        }
 
         const label = `${box.className.toUpperCase()} ${(box.confidence * 100).toFixed(0)}%`;
         const chip = layoutLabel({ x, y, w, h }, ctx.measureText(label).width + padX * 2, chipH, cw, ch);

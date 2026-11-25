@@ -217,6 +217,21 @@ export interface VideoSummary {
   peak_frame_count: number;
 }
 
+// Mirrors VideoFilterReport in cv-backend/app/schemas.py: what the video
+// clean-up filters did to the raw detections.
+export interface VideoFilterReport {
+  min_persistence: number;
+  keep_confidence: number;
+  min_box_area_pct: number;
+  min_track_confidence: number;
+  detections_before: number;
+  detections_after: number;
+  removed_transient: number;
+  removed_weak: number;
+  removed_by_size: number;
+  applies_to_annotated_video: boolean;
+}
+
 export interface VideoDetectionResponse {
   total_frames: number;
   frames_analysed: number;
@@ -231,12 +246,17 @@ export interface VideoDetectionResponse {
   summary: VideoSummary;
   model_name: string;
   confidence_threshold: number;
+  // Absent from older backends.
+  filtering?: VideoFilterReport;
 }
 
 export interface VideoProcessingOptions {
   // Analyse every Nth frame (backend `frame_stride`, 1-60).
   frameStride: number;
   confidenceThreshold: number;
+  // Clean up busy scenes: drop objects that are only ever weak and one-frame
+  // flicker (backend min_track_confidence / min_persistence). Default on.
+  cleanUp?: boolean;
   onUploadProgress?: (percent: number) => void;
   signal?: AbortSignal;
 }

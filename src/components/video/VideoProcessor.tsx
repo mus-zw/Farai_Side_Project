@@ -129,6 +129,30 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
       {/* 2. Processed Results View */}
       {videoUrl && detectionResult && (
         <div className="space-y-6 pt-4 border-t border-neutral-800">
+          {/* What the clean-up removed, so filtered results are never silent */}
+          {detectionResult.filtering &&
+            (detectionResult.filtering.removed_weak > 0 ||
+              detectionResult.filtering.removed_transient > 0 ||
+              detectionResult.filtering.removed_by_size > 0) && (
+              <p
+                data-testid="cleanup-report"
+                className="rounded-xl border border-cyan-500/30 bg-cyan-950/30 p-3 text-xs leading-relaxed text-cyan-100"
+              >
+                <span className="font-semibold">Busy-scene clean-up: </span>
+                kept {detectionResult.filtering.detections_after} of{' '}
+                {detectionResult.filtering.detections_before} detections.
+                {detectionResult.filtering.removed_weak > 0 &&
+                  ` ${detectionResult.filtering.removed_weak} belonged to objects never detected above ${Math.round(
+                    detectionResult.filtering.min_track_confidence * 100
+                  )}% confidence.`}
+                {detectionResult.filtering.removed_transient > 0 &&
+                  ` ${detectionResult.filtering.removed_transient} appeared in only one analysed frame.`}
+                {detectionResult.filtering.removed_by_size > 0 &&
+                  ` ${detectionResult.filtering.removed_by_size} were smaller than ${detectionResult.filtering.min_box_area_pct}% of the frame.`}{' '}
+                Untick &quot;Clean up busy scenes&quot; and re-run to see them.
+              </p>
+            )}
+
           {/* Subtabs for Video View */}
           <div className="flex items-center gap-2 p-1 rounded-xl border border-neutral-800 bg-neutral-900/80 overflow-x-auto">
             <button
