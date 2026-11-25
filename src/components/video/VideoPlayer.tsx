@@ -1,209 +1,277 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { Play, Pause, RotateCcw, FastForward, Rewind } from 'lucide-react';
+import { VideoDetectionResponse } from '../../types';
 import {
-  Play,
-  Pause,
-  RotateCcw,
-  FastForward,
-  Rewind,
-  Volume2,
-  VolumeX,
-  Maximize2,
-  SlidersHorizontal,
-  Layers,
-  Sparkles,
-  Filter,
-} from 'lucide-react';
-import { VideoDetectionResponse, VideoBox } from '../../types';
-import { frameIndexAtTime } from '../../utils/videoFrames';
+  activeCountsByClass,
+  clampBox,
+  layoutLabel,
+  overlayAtTime,
+  playbackFrameNumber,
+  readableTextColor,
+} from '../../utils/videoOverlay';
 import { capitalizeClass } from '../../utils/formatters';
 
 interface VideoPlayerProps {
   videoUrl: string;
   detectionData?: VideoDetectionResponse | null;
+  /** Called when the frame on screen changes: source frame number and its time in seconds. */
   onFrameChange?: (frameNumber: number, timestamp: number) => void;
+  /** A new `nonce` makes the player jump to `time` (seconds). The initial value is ignored. */
+  seekRequest?: { time: number; nonce: number } | null;
+  /** Where to start when this player mounts (e.g. after switching sub-tabs). */
+  startTime?: number;
   filterClass?: string | null;
 }
+
+interface Hud {
+  time: number;
+  frame: number;
+  count: number;
+}
+
+// Pixel sizes below are in *screen* pixels; they are divided by the video's
+// display scale before drawing, so a tall portrait clip shown small still gets
+// readable labels and a 4K clip shown small does not get hairlines.
+const FONT_PX = 12;
+const LINE_PX = 2;
 
 export default function VideoPlayer({
   videoUrl,
   detectionData,
   onFrameChange,
+  seekRequest = null,
+  startTime = 0,
   filterClass = null,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
-  const [currentFrameNumber, setCurrentFrameNumber] = useState<number>(0);
-  const [currentDetections, setCurrentDetections] = useState<VideoBox[]>([]);
   const [playbackRate, setPlaybackRate] = useState<number>(1.0);
-  const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [isMuted] = useState<boolean>(true);
   const [selectedClassFilter, setSelectedClassFilter] = useState<string | null>(filterClass);
 
-  // Draw the backend's bounding boxes for the current frame onto the canvas
-  const renderOverlay = useCallback(
-    (timestamp: number) => {
+  // What the HUD, scrub bar and pills show. Written only when a value changes,
+  // never once per animation frame.
+  const [hud, setHud] = useState<Hud>({ time: 0, frame: 0, count: 0 });
+  const [liveCounts, setLiveCounts] = useState<Record<string, number>>({});
+  const hudRef = useRef<Hud>({ time: -1, frame: -1, count: -1 });
+  const countsKeyRef = useRef<string>('');
+  const reportedFrameRef = useRef<number>(-1);
+
+  const onFrameChangeRef = useRef(onFrameChange);
+  onFrameChangeRef.current = onFrameChange;
+
+  const frames = detectionData?.frame_detections;
+  const fps = detectionData?.fps ?? 30;
+  const totalFrames = detectionData?.total_frames ?? 0;
+
+  // Classes for the pills, most frequent first.
+  const classes = useMemo(
+    () =>
+      Object.entries(detectionData?.summary.object_count_per_class ?? {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([name]) => name),
+    [detectionData]
+  );
+  const classColors = useMemo(() => {
+    const colors: Record<string, string> = {};
+    for (const f of frames ?? []) {
+      for (const [name, entry] of Object.entries(f.detections)) {
+        if (!colors[name] && entry.color) colors[name] = entry.color;
+      }
+    }
+    return colors;
+  }, [frames]);
+
+  /** Draw the boxes for `mediaTime` and sync the HUD to it. */
+  const draw = useCallback(
+    (mediaTime: number) => {
       const canvas = canvasRef.current;
       const video = videoRef.current;
       if (!canvas || !video) return;
-
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      // Sync canvas dimensions to video render size
-      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 360;
+      // Canvas pixels = the video's displayed pixels (after any rotation).
+      const cw = video.videoWidth || canvas.width || 640;
+      const ch = video.videoHeight || canvas.height || 360;
+      if (canvas.width !== cw || canvas.height !== ch) {
+        canvas.width = cw;
+        canvas.height = ch;
       }
+      ctx.clearRect(0, 0, cw, ch);
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const state = overlayAtTime(frames ?? [], mediaTime);
+      const filter = selectedClassFilter?.toLowerCase() ?? null;
+      const visible = filter ? state.boxes.filter((b) => b.className.toLowerCase() === filter) : state.boxes;
+      const activeCount = filter
+        ? visible.filter((b) => b.alpha >= 0.5).length
+        : state.activeCount;
 
-      if (!detectionData?.frame_detections || detectionData.frame_detections.length === 0) {
-        return;
-      }
+      // Screen pixels per canvas pixel under object-fit: contain.
+      const rect = canvas.getBoundingClientRect();
+      const scale = rect.width > 0 && rect.height > 0 ? Math.min(rect.width / cw, rect.height / ch) : 1;
+      const px = (n: number) => n / scale;
 
-      // Only every frame_stride-th frame was analysed; show the most recent
-      // analysed frame at or before the playback position.
-      const frame = detectionData.frame_detections[frameIndexAtTime(detectionData.frame_detections, timestamp)];
+      const fontSize = px(FONT_PX);
+      const padX = px(6);
+      const padY = px(3);
+      const chipH = fontSize * 1.25 + padY * 2;
+      ctx.font = `600 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
+      ctx.textBaseline = 'middle';
 
-      if (!frame || !frame.boxes) return;
+      for (const box of visible) {
+        const [x, y, w, h] = clampBox(
+          [box.bbox[0] * cw, box.bbox[1] * ch, box.bbox[2] * cw, box.bbox[3] * ch],
+          cw,
+          ch
+        );
+        if (w <= 0 || h <= 0) continue;
 
-      setCurrentFrameNumber(frame.frame_number);
-      if (onFrameChange) {
-        onFrameChange(frame.frame_number, frame.timestamp);
-      }
-
-      // Filter boxes
-      const boxes = frame.boxes.filter(
-        (b) => !selectedClassFilter || b.className.toLowerCase() === selectedClassFilter.toLowerCase()
-      );
-      setCurrentDetections(boxes);
-
-      const width = canvas.width;
-      const height = canvas.height;
-
-      // Draw bounding boxes in the backend's per-class colours.
-      for (const box of boxes) {
-        const [nx, ny, nw, nh] = box.bbox;
-        const bx = nx * width;
-        const by = ny * height;
-        const bw = nw * width;
-        const bh = nh * height;
-        const color = { hex: box.color };
-
-        // Bounding Box
         ctx.save();
-        ctx.strokeStyle = color.hex;
-        ctx.lineWidth = Math.max(2.5, Math.round(width * 0.0035));
-        ctx.strokeRect(bx, by, bw, bh);
+        ctx.globalAlpha = box.alpha;
+        ctx.strokeStyle = box.color;
+        ctx.lineWidth = px(LINE_PX);
+        ctx.strokeRect(x, y, w, h);
 
-        // Corner accents
-        const notch = Math.min(14, bw * 0.25, bh * 0.25);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = Math.max(3, Math.round(width * 0.0045));
+        const label = `${box.className.toUpperCase()} ${(box.confidence * 100).toFixed(0)}%`;
+        const chip = layoutLabel({ x, y, w, h }, ctx.measureText(label).width + padX * 2, chipH, cw, ch);
+        ctx.fillStyle = box.color;
         ctx.beginPath();
-        ctx.moveTo(bx, by + notch);
-        ctx.lineTo(bx, by);
-        ctx.lineTo(bx + notch, by);
-        ctx.stroke();
-
-        // Label badge
-        const fontSize = Math.max(11, Math.min(16, Math.round(width * 0.016)));
-        ctx.font = `600 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
-
-        const labelText = `${box.className.toUpperCase()} ${(box.confidence * 100).toFixed(0)}%`;
-        const textMetrics = ctx.measureText(labelText);
-        const textW = textMetrics.width;
-        const textH = fontSize * 1.3;
-        const padX = 6;
-        const padY = 3;
-
-        const chipY = by > textH + 6 ? by - textH - padY : by;
-
-        ctx.fillStyle = color.hex;
-        ctx.beginPath();
-        ctx.roundRect(bx, chipY, textW + padX * 2, textH + padY, 4);
+        if (typeof ctx.roundRect === 'function') ctx.roundRect(chip.x, chip.y, chip.w, chip.h, px(3));
+        else ctx.rect(chip.x, chip.y, chip.w, chip.h);
         ctx.fill();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(labelText, bx + padX, chipY + (textH + padY) / 2);
-
+        ctx.fillStyle = readableTextColor(box.color);
+        ctx.fillText(label, chip.x + padX, chip.y + chip.h / 2);
         ctx.restore();
       }
+
+      // --- HUD, kept in step with the frame actually on screen ---
+      const frame = playbackFrameNumber(mediaTime, fps, totalFrames);
+      const prev = hudRef.current;
+      if (
+        frame !== prev.frame ||
+        activeCount !== prev.count ||
+        Math.abs(mediaTime - prev.time) >= 0.04
+      ) {
+        hudRef.current = { time: mediaTime, frame, count: activeCount };
+        setHud(hudRef.current);
+      }
+
+      const counts = activeCountsByClass(state);
+      const key = JSON.stringify(counts);
+      if (key !== countsKeyRef.current) {
+        countsKeyRef.current = key;
+        setLiveCounts(counts);
+      }
+
+      if (frame !== reportedFrameRef.current) {
+        reportedFrameRef.current = frame;
+        onFrameChangeRef.current?.(frame, mediaTime);
+      }
     },
-    [detectionData, onFrameChange, selectedClassFilter]
+    [frames, fps, totalFrames, selectedClassFilter]
   );
 
-  // Animation frame loop synchronized with video playback
+  // Keep the overlay locked to the frame the browser presents. With
+  // requestVideoFrameCallback we get the exact media time of each presented
+  // frame (including after seeks); otherwise fall back to polling currentTime
+  // while playing.
   useEffect(() => {
-    let animId: number;
+    const video = videoRef.current;
+    if (!video) return;
 
-    const loop = () => {
-      const video = videoRef.current;
-      if (video) {
-        setCurrentTime(video.currentTime);
-        renderOverlay(video.currentTime);
-      }
-      if (isPlaying) {
-        animId = requestAnimationFrame(loop);
-      }
+    const redraw = () => draw(video.currentTime);
+    const hasRvfc = typeof video.requestVideoFrameCallback === 'function';
+
+    // Without frame callbacks, timeupdate/play also trigger redraws; with them
+    // those would race the callback and flicker by a frame, so skip them.
+    const events = hasRvfc
+      ? ['seeked', 'loadeddata', 'pause', 'ended']
+      : ['seeked', 'loadeddata', 'pause', 'ended', 'play', 'timeupdate', 'ratechange'];
+    events.forEach((e) => video.addEventListener(e, redraw));
+
+    let handle = 0;
+    let raf = 0;
+    if (hasRvfc) {
+      const onFrame: VideoFrameRequestCallback = (_now, meta) => {
+        draw(meta.mediaTime);
+        handle = video.requestVideoFrameCallback(onFrame);
+      };
+      handle = video.requestVideoFrameCallback(onFrame);
+    } else if (isPlaying) {
+      const loop = () => {
+        draw(video.currentTime);
+        raf = requestAnimationFrame(loop);
+      };
+      raf = requestAnimationFrame(loop);
+    }
+
+    redraw(); // new detections, filter or size: repaint now
+
+    return () => {
+      events.forEach((e) => video.removeEventListener(e, redraw));
+      if (hasRvfc && handle) video.cancelVideoFrameCallback(handle);
+      cancelAnimationFrame(raf);
     };
+  }, [draw, isPlaying]);
 
-    if (isPlaying) {
-      animId = requestAnimationFrame(loop);
-    } else {
-      renderOverlay(videoRef.current?.currentTime || 0);
-    }
+  // Repaint when the stage is resized, so label sizes follow the display scale.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => draw(videoRef.current?.currentTime ?? 0));
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [draw]);
 
-    return () => cancelAnimationFrame(animId);
-  }, [isPlaying, renderOverlay]);
+  // External seek (timeline, frame inspector). The value present at mount is
+  // not a request: it was already handled by whichever player was showing.
+  const handledNonce = useRef<number | undefined>(seekRequest?.nonce);
+  useEffect(() => {
+    if (!seekRequest || seekRequest.nonce === handledNonce.current) return;
+    handledNonce.current = seekRequest.nonce;
+    const video = videoRef.current;
+    if (!video) return;
+    const limit = Number.isFinite(video.duration) ? video.duration : seekRequest.time;
+    video.currentTime = Math.max(0, Math.min(seekRequest.time, limit));
+  }, [seekRequest]);
 
-  // Video event handlers
   const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration || 0);
-      renderOverlay(0);
-    }
+    const video = videoRef.current;
+    if (!video) return;
+    setDuration(video.duration || 0);
+    if (startTime > 0) video.currentTime = Math.min(startTime, video.duration || startTime);
+    draw(video.currentTime);
   };
 
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) {
-      video.play();
-      setIsPlaying(true);
-    } else {
-      video.pause();
-      setIsPlaying(false);
-    }
+    if (video.paused) void video.play().catch(() => setIsPlaying(false));
+    else video.pause();
   };
 
   const handleSeek = (newTime: number) => {
     const video = videoRef.current;
     if (!video) return;
     video.currentTime = newTime;
-    setCurrentTime(newTime);
-    renderOverlay(newTime);
+    draw(newTime);
   };
 
   const handleSkip = (seconds: number) => {
     const video = videoRef.current;
     if (!video) return;
-    const target = Math.max(0, Math.min(video.duration, video.currentTime + seconds));
-    handleSeek(target);
+    handleSeek(Math.max(0, Math.min(video.duration || 0, video.currentTime + seconds)));
   };
 
   const handleSpeedChange = (rate: number) => {
     setPlaybackRate(rate);
-    if (videoRef.current) {
-      videoRef.current.playbackRate = rate;
-    }
+    if (videoRef.current) videoRef.current.playbackRate = rate;
   };
 
-  // Format time (00:04.2)
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = (seconds % 60).toFixed(1);
@@ -214,33 +282,38 @@ export default function VideoPlayer({
     <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4 sm:p-6 space-y-4 shadow-xl">
       {/* Visual Canvas + Video Stage */}
       <div className="relative aspect-[16/9] w-full max-h-[580px] overflow-hidden rounded-xl border border-neutral-800 bg-black flex items-center justify-center">
-        {/* HTML5 Video Element */}
         <video
           ref={videoRef}
           src={videoUrl}
           playsInline
           muted={isMuted}
           onLoadedMetadata={handleLoadedMetadata}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
           onEnded={() => setIsPlaying(false)}
           className="h-full w-full object-contain pointer-events-none"
         />
 
-        {/* Bounding box overlay canvas */}
+        {/* Bounding box overlay canvas (same object-contain box as the video) */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 h-full w-full object-contain pointer-events-none"
         />
 
-        {/* Active Frame Info Tag */}
-        <div className="absolute top-3 left-3 flex items-center gap-2 rounded-lg bg-neutral-950/80 border border-neutral-800 px-2.5 py-1 text-[11px] font-mono text-neutral-300 backdrop-blur-sm pointer-events-none shadow-md">
-          <span className="text-[#32FF00] font-bold">FRAME #{currentFrameNumber}</span>
+        {/* HUD: source frame on screen, its time, and objects drawn right now */}
+        <div
+          data-testid="video-hud"
+          className="absolute top-3 left-3 flex items-center gap-2 rounded-lg bg-neutral-950/80 border border-neutral-800 px-2.5 py-1 text-[11px] font-mono text-neutral-300 backdrop-blur-sm pointer-events-none shadow-md"
+        >
+          <span className="text-[#32FF00] font-bold">FRAME #{hud.frame}</span>
           <span>·</span>
-          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(hud.time)}</span>
           <span>·</span>
-          <span className="text-cyan-300">{currentDetections.length} objects active</span>
+          <span className="text-cyan-300">
+            {hud.count} {hud.count === 1 ? 'object' : 'objects'} active
+          </span>
         </div>
 
-        {/* Big Center Play/Pause button on click */}
         <button
           type="button"
           onClick={togglePlay}
@@ -262,19 +335,19 @@ export default function VideoPlayer({
           min="0"
           max={duration || 10}
           step="0.04"
-          value={currentTime}
+          value={Math.min(hud.time, duration || 10)}
           onChange={(e) => handleSeek(parseFloat(e.target.value))}
+          aria-label="Seek"
           className="w-full h-2 rounded-lg accent-[#32FF00] bg-neutral-800 cursor-pointer"
         />
         <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
-          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(hud.time)}</span>
           <span>{formatTime(duration)}</span>
         </div>
       </div>
 
       {/* Controls Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
-        {/* Playback Transport Buttons */}
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -314,7 +387,6 @@ export default function VideoPlayer({
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
 
-          {/* Speed Selector */}
           <div className="flex items-center rounded-lg border border-neutral-800 bg-neutral-950 p-0.5 text-xs font-mono ml-2">
             {[0.5, 1.0, 1.5, 2.0].map((rate) => (
               <button
@@ -332,27 +404,54 @@ export default function VideoPlayer({
             ))}
           </div>
         </div>
-
-        {/* Toggles & Filters */}
-        <div className="flex flex-wrap items-center gap-4 text-xs text-neutral-300">
-          {/* Class Filter Dropdown */}
-          <div className="flex items-center gap-1.5">
-            <Filter className="h-3.5 w-3.5 text-neutral-400" />
-            <select
-              value={selectedClassFilter || ''}
-              onChange={(e) => setSelectedClassFilter(e.target.value || null)}
-              className="rounded-lg border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs text-white focus:border-[#32FF00] focus:outline-none"
-            >
-              <option value="">All Classes</option>
-              {Object.keys(detectionData?.summary.object_count_per_class || {}).map((cls) => (
-                <option key={cls} value={cls}>
-                  {capitalizeClass(cls)}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
       </div>
+
+      {/* Class pills: live count of what is on screen now; click to show one class only */}
+      {classes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by class">
+          <button
+            type="button"
+            onClick={() => setSelectedClassFilter(null)}
+            aria-pressed={selectedClassFilter === null}
+            className={`min-h-[32px] rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+              selectedClassFilter === null
+                ? 'border-[#32FF00] bg-[#32FF00]/15 text-[#32FF00]'
+                : 'border-neutral-800 text-neutral-400 hover:text-white'
+            }`}
+          >
+            All
+          </button>
+          {classes.map((cls) => {
+            const selected = selectedClassFilter?.toLowerCase() === cls.toLowerCase();
+            const now = liveCounts[cls] ?? 0;
+            return (
+              <button
+                key={cls}
+                type="button"
+                onClick={() => setSelectedClassFilter(selected ? null : cls)}
+                aria-pressed={selected}
+                data-class-pill={cls}
+                className={`min-h-[32px] inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                  selected
+                    ? 'border-[#32FF00] bg-[#32FF00]/15 text-white'
+                    : now > 0
+                    ? 'border-neutral-600 text-white hover:border-neutral-400'
+                    : 'border-neutral-800 text-neutral-500 hover:text-neutral-300'
+                }`}
+              >
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: classColors[cls] ?? '#32FF00' }}
+                />
+                <span>{capitalizeClass(cls)}</span>
+                <span className="font-mono tabular-nums text-[11px] text-neutral-300" data-pill-count>
+                  {now}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Video,
   Play,
@@ -17,7 +17,8 @@ import {
   VideoDetectionResponse,
 } from '../../types';
 import { processVideo } from '../../services/videoApi';
-import { frameIndexForFrameNumber } from '../../utils/videoFrames';
+import { frameIndexAtTime } from '../../utils/videoFrames';
+import { activeCountsByClass, overlayAtTime } from '../../utils/videoOverlay';
 import VideoUpload from './VideoUpload';
 import VideoPlayer from './VideoPlayer';
 import VideoTimeline from './VideoTimeline';
@@ -40,14 +41,34 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
 
   const [detectionResult, setDetectionResult] = useState<VideoDetectionResponse | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<VideoSubTab>('player');
-  // A source-video frame number, shared by the player, timeline and inspector.
-  const [currentFrameNumber, setCurrentFrameNumber] = useState<number>(0);
+  // Playback position in seconds, shared by the player, timeline and inspector.
+  // The player reports it as the frame on screen changes; the timeline and
+  // inspector send seek requests back through `seekRequest`.
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [seekRequest, setSeekRequest] = useState<{ time: number; nonce: number } | null>(null);
+
+  const seekTo = (seconds: number) => {
+    const t = Math.max(0, seconds);
+    setCurrentTime(t); // move the playhead now; the video follows
+    setSeekRequest({ time: t, nonce: (seekRequest?.nonce ?? 0) + 1 });
+  };
+
+  // What is on screen at currentTime, for the timeline's "now" counts.
+  const activeCounts = useMemo(
+    () =>
+      detectionResult
+        ? activeCountsByClass(overlayAtTime(detectionResult.frame_detections, currentTime))
+        : {},
+    [detectionResult, currentTime]
+  );
 
   const handleVideoSelected = (file: File | Blob, meta: VideoMetadata, url: string) => {
     setVideoFile(file);
     setVideoMetadata(meta);
     setVideoUrl(url);
     setDetectionResult(null);
+    setCurrentTime(0);
+    setSeekRequest(null);
   };
 
   const handleStartProcessing = async (options: VideoProcessingOptions) => {
@@ -63,7 +84,8 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
       });
 
       setDetectionResult(result);
-      setCurrentFrameNumber(result.frame_detections[0]?.frame_number ?? 0);
+      setCurrentTime(0);
+      setSeekRequest(null);
       onNotify(
         'success',
         `Video analysis complete: ${result.frames_analysed} of ${result.total_frames} frames analysed in ${result.processing_time_ms}ms.`
@@ -156,13 +178,16 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
               <VideoPlayer
                 videoUrl={videoUrl}
                 detectionData={detectionResult}
-                onFrameChange={(f) => setCurrentFrameNumber(f)}
+                startTime={currentTime}
+                seekRequest={seekRequest}
+                onFrameChange={(_frame, t) => setCurrentTime(t)}
               />
 
               <VideoTimeline
                 detectionData={detectionResult}
-                currentFrame={currentFrameNumber}
-                onSeekToFrame={(f) => setCurrentFrameNumber(f)}
+                currentTime={currentTime}
+                activeCounts={activeCounts}
+                onSeekToTime={seekTo}
               />
             </div>
           )}
@@ -173,18 +198,21 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
               <VideoPlayer
                 videoUrl={videoUrl}
                 detectionData={detectionResult}
-                onFrameChange={(f) => setCurrentFrameNumber(f)}
+                startTime={currentTime}
+                seekRequest={seekRequest}
+                onFrameChange={(_frame, t) => setCurrentTime(t)}
               />
 
               <FrameAnalysis
                 detectionData={detectionResult}
                 currentFrameIndex={Math.max(
                   0,
-                  frameIndexForFrameNumber(detectionResult.frame_detections, currentFrameNumber)
+                  frameIndexAtTime(detectionResult.frame_detections, currentTime)
                 )}
-                onSelectFrame={(idx) =>
-                  setCurrentFrameNumber(detectionResult.frame_detections[idx]?.frame_number ?? 0)
-                }
+                onSelectFrame={(idx) => {
+                  const target = detectionResult.frame_detections[idx];
+                  if (target) seekTo(target.timestamp);
+                }}
               />
             </div>
           )}
