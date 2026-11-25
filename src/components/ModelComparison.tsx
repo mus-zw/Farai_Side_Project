@@ -4,6 +4,7 @@ import { CompareResponse } from '../types';
 import { compareModels } from '../services/compareApi';
 import { getModelInfo, SelectableModel } from '../services/systemApi';
 import ComparisonMetrics from './ComparisonMetrics';
+import StageTimingBar from './StageTimingBar';
 import ConfidenceSlider from './ConfidenceSlider';
 
 interface ModelComparisonProps {
@@ -26,6 +27,7 @@ export default function ModelComparison({
   // /api/compare will accept.
   const [models, setModels] = useState<SelectableModel[]>([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [nmsNote, setNmsNote] = useState<string>('');
   const [modelA, setModelA] = useState<string>('');
   const [modelB, setModelB] = useState<string>('');
   const [confidenceThreshold, setConfidenceThreshold] = useState<number>(0.25);
@@ -36,15 +38,20 @@ export default function ModelComparison({
     getModelInfo()
       .then((info) => {
         setModels(info.selectable_models);
-        // Same default pairing as the backend: current model vs YOLOv8 Large,
-        // or vs Medium when Large is already the current model.
-        const current = info.current_model;
-        const challenger = current === 'yolov8l-seg.pt' ? 'yolov8m-seg.pt' : 'yolov8l-seg.pt';
-        setModelA(current);
-        setModelB(info.selectable_models.some((m) => m.name === challenger) ? challenger : '');
+        // The backend decides the default pairing (one NMS model, one NMS-free
+        // model), so the UI never has to duplicate that rule.
+        setNmsNote(info.nms_note);
+        const [a, b] = info.default_comparison;
+        const known = (name: string) => info.selectable_models.some((m) => m.name === name);
+        setModelA(known(a) ? a : info.current_model);
+        setModelB(known(b) ? b : '');
       })
       .catch((err) => setModelsError(err?.message || 'Could not load the model list.'));
   }, []);
+
+  const flagFor = (name: string) => models.find((m) => m.name === name)?.nms_free;
+  const mixedNmsSelection =
+    flagFor(modelA) !== undefined && flagFor(modelB) !== undefined && flagFor(modelA) !== flagFor(modelB);
 
   const runComparison = async () => {
     if (!originalImageUrl || !currentFile) {
@@ -99,7 +106,12 @@ export default function ModelComparison({
         if (!info) return null;
         return (
           <p className="text-[11px] text-neutral-400">
-            {[info.speed && `Speed: ${info.speed}`, info.accuracy && `Accuracy: ${info.accuracy}`]
+            {[
+              info.nms_free === undefined ? undefined : info.nms_free ? 'NMS-free' : 'Uses NMS',
+              info.supports_segmentation === false ? 'Boxes only (no masks)' : undefined,
+              info.speed && `Speed: ${info.speed}`,
+              info.accuracy && `Accuracy: ${info.accuracy}`,
+            ]
               .filter(Boolean)
               .join(' · ')}
             {!info.resident && ' · loads on first use (a few seconds)'}
@@ -165,6 +177,13 @@ export default function ModelComparison({
           {renderPicker('Model B', ACCENTS[1], modelB, setModelB)}
         </div>
 
+        {mixedNmsSelection && nmsNote && (
+          <p className="rounded-lg border border-cyan-500/30 bg-cyan-950/30 p-3 text-[11px] leading-relaxed text-cyan-100">
+            <span className="font-semibold">Why this pairing: </span>
+            {nmsNote}
+          </p>
+        )}
+
         <ConfidenceSlider
           value={confidenceThreshold}
           onChange={(newVal) => setConfidenceThreshold(newVal)}
@@ -188,6 +207,17 @@ export default function ModelComparison({
                       {r.total_objects} objs · {r.processing_time_ms} ms{r.cached ? ' · cached' : ''}
                     </span>
                   </div>
+                  <div className="flex flex-wrap gap-1.5 text-[10px] font-medium">
+                    <span className="rounded-full border border-neutral-700 px-2 py-0.5 text-neutral-300">
+                      {r.nms_free ? 'NMS-free' : 'Uses NMS'}
+                    </span>
+                    {!r.supports_segmentation && (
+                      <span className="rounded-full border border-neutral-700 px-2 py-0.5 text-neutral-400">
+                        Boxes only · no masks
+                      </span>
+                    )}
+                  </div>
+                  <StageTimingBar timings={r.stage_timings} accent={accent} />
                   <div
                     className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border bg-neutral-950 flex items-center justify-center group"
                     style={{ borderColor: `${accent}66` }}
@@ -213,6 +243,13 @@ export default function ModelComparison({
               );
             })}
           </div>
+
+          {comparisonResult.note && (
+            <p className="rounded-lg border border-cyan-500/30 bg-cyan-950/30 p-3 text-[11px] leading-relaxed text-cyan-100">
+              <span className="font-semibold">Why NMS vs NMS-free matters: </span>
+              {comparisonResult.note}
+            </p>
+          )}
 
           <ComparisonMetrics comparison={comparisonResult} />
         </div>

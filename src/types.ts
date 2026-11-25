@@ -10,6 +10,15 @@ export interface DetectionScoreBreakdown {
   average_confidence?: number;
 }
 
+// Mirrors StageTimings in cv-backend/app/schemas.py (Ultralytics' per-stage
+// clock, milliseconds). postprocess_ms includes NMS for NMS models, and mask
+// decoding for segmentation models; it excludes the server's own drawing.
+export interface StageTimings {
+  preprocess_ms: number;
+  inference_ms: number;
+  postprocess_ms: number;
+}
+
 export interface DetectionResponse {
   total_objects: number;
   detections: Record<string, DetectionScoreBreakdown>;
@@ -22,6 +31,12 @@ export interface DetectionResponse {
   image_width?: number;
   image_height?: number;
   cached?: boolean;
+  // Optional: absent from older backends and from gallery-restored results.
+  stage_timings?: StageTimings;
+  // false for boxes-only models (YOLOv10, RT-DETR): no masks are drawn.
+  supports_segmentation?: boolean;
+  // true when the model has no Non-Maximum Suppression step.
+  nms_free?: boolean;
 }
 
 export interface BoundingBox {
@@ -114,6 +129,9 @@ export interface ModelComparisonEntry {
   processing_time_ms: number;
   annotated_image_base64: string;
   cached?: boolean;
+  stage_timings: StageTimings;
+  supports_segmentation: boolean;
+  nms_free: boolean;
 }
 
 export interface ClassCountComparison {
@@ -143,6 +161,8 @@ export interface CompareResponse {
   confidence_threshold: number;
   results: ModelComparisonEntry[];
   comparison: ComparisonSummary;
+  // Set when the comparison mixes NMS and NMS-free models: why that matters.
+  note?: string | null;
 }
 
 export interface AnalyticsStats {

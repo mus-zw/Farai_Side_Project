@@ -31,6 +31,8 @@ export interface SelectableModel {
   speed?: string;
   accuracy?: string;
   resident?: boolean;
+  supports_segmentation?: boolean;
+  nms_free?: boolean;
 }
 
 export interface ModelInfoResponse {
@@ -41,6 +43,9 @@ export interface ModelInfoResponse {
   supports_segmentation: boolean;
   input_size: number;
   selectable_models: SelectableModel[];
+  // The two models /api/compare uses by default: one NMS, one NMS-free.
+  default_comparison: string[];
+  nms_note: string;
 }
 
 async function getJson<T>(path: string): Promise<T> {
