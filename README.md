@@ -26,7 +26,9 @@ A production-grade, authentic portfolio and interactive computer vision suite de
 ---
 
 ## 🚀 Interactive Computer Vision Suite (`/demo`)
-- **Flagship African Penguin Dataset**: Instant one-click test scan loaded with 12 dense small-object detections in coastal terrain.
+- **Sample images** (inputs only; every detection comes from the backend):
+  - *General scenes* that COCO-trained models handle well. The default is `public/samples/bus.jpg`, the Ultralytics demo image (`ultralytics/assets/bus.jpg`, shipped with the `ultralytics` package; also at https://ultralytics.com/images/bus.jpg).
+  - *Research context: penguins*. The African penguin colony photo is kept in its own section. COCO has no penguin class, so a general COCO model can only call them "bird"; a dedicated small-object penguin detector is part of ongoing MSc research.
 - **Split Before/After Inspection**: Draggable slider with keyboard support (`←`/`→`) and side-by-side mode.
 - **Dynamic Confidence Filtering**: Smooth slider (0–100%) with dynamic color gradient (`#ef4444` → `#eab308` → `#32FF00`).
 - **Batch Processing Mode**: Sequential processing of multi-image queues with automated packaged `.zip` export and JSON manifest.

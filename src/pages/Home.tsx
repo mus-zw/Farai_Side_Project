@@ -17,11 +17,11 @@ import {
   BookOpen,
   Award,
 } from 'lucide-react';
-import { SAMPLE_IMAGES } from '../utils/sampleData';
+import { DEFAULT_SAMPLE } from '../utils/sampleData';
 import SkillsSection from '../components/SkillsSection';
 
 export default function Home() {
-  const sample = SAMPLE_IMAGES[0]; // African Penguin Colony flagship sample
+  const sample = DEFAULT_SAMPLE; // a scene COCO models handle well; real output comes only from /demo
 
   return (
     <div className="space-y-24 py-8 md:py-16">
@@ -97,21 +97,21 @@ export default function Home() {
                   Sample Input
                 </span>
                 <span className="text-[#32FF00] font-mono text-[11px] bg-[#32FF00]/10 px-2 py-0.5 rounded-full border border-[#32FF00]/30">
-                  African Penguin Colony
+                  {sample.title}
                 </span>
               </div>
 
               <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-xl border border-[#16213E] bg-[#0F1419]">
                 <img
                   src={sample.dataUrl}
-                  alt="African penguin colony aerial view"
+                  alt={sample.title}
                   className="h-full w-full object-cover"
                   referrerPolicy="no-referrer"
                 />
               </div>
 
               <div className="mt-3 flex items-center justify-between text-xs text-[#CCCCCC]">
-                <span>Run this image through the live model</span>
+                <span>Input only: run it through the live model to see detections</span>
                 <Link
                   to={`/demo?sample=${sample.id}`}
                   className="text-xs font-semibold text-[#32FF00] hover:underline flex items-center gap-1"
@@ -251,7 +251,7 @@ export default function Home() {
 
             <div className="pt-4 border-t border-[#16213E] flex items-center justify-between">
               <Link
-                to="/demo?sample=african-penguins"
+                to={`/demo?sample=${sample.id}`}
                 className="btn-lime inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold shadow-md"
               >
                 <span>Launch Interactive Demo</span>

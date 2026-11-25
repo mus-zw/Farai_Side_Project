@@ -95,6 +95,14 @@ export interface SampleImageOption {
   description: string;
   category: string;
   dataUrl: string;
+  // 'general': scenes COCO-trained detectors handle well.
+  // 'research-context': shown for context; general COCO models are not
+  // trained on it, and `note` says why.
+  section: 'general' | 'research-context';
+  // Where the image comes from, when it is not the author's own.
+  source?: { label: string; url: string };
+  // Shown with the sample in the picker and in the Demo while it is loaded.
+  note?: string;
   metadata: {
     width: number;
     height: number;

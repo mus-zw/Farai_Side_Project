@@ -72,6 +72,7 @@ export default function Demo({ onNotify }: DemoProps) {
   const [currentFile, setCurrentFile] = useState<File | null>(null);
   const [imageMetadata, setImageMetadata] = useState<ImageMetadata | null>(null);
   const [activeSampleId, setActiveSampleId] = useState<string | null>(null);
+  const activeSample = SAMPLE_IMAGES.find((x) => x.id === activeSampleId);
   const [detectionResult, setDetectionResult] = useState<VisionDetectionResult | null>(null);
 
   // Inspector Options. 0.25 matches the backend's CONFIDENCE_THRESHOLD default.
@@ -489,6 +490,14 @@ export default function Demo({ onNotify }: DemoProps) {
         </div>
       </div>
 
+      {/* Context note for samples COCO models aren't trained on (the penguin photo) */}
+      {mediaMode === 'image' && activeSample?.note && (
+        <p className="rounded-xl border border-cyan-500/30 bg-cyan-950/30 p-3 text-xs leading-relaxed text-cyan-100">
+          <span className="font-semibold">About this sample: </span>
+          {activeSample.note}
+        </p>
+      )}
+
       {/* Primary Modality Switcher: Image vs Video */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-2 rounded-2xl border border-neutral-800 bg-neutral-900/90 shadow-lg">
         <div className="flex items-center gap-2">
@@ -882,10 +891,10 @@ export default function Demo({ onNotify }: DemoProps) {
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
               <div>
                 <h3 className="font-display text-lg font-bold text-white">
-                  Select Benchmark Sample Image
+                  Select a Sample Image
                 </h3>
                 <p className="text-xs text-neutral-400">
-                  Curated testing sets demonstrating multi-class object detection and segmentation
+                  Input images only: every detection shown comes from the live backend
                 </p>
               </div>
               <button
@@ -897,34 +906,68 @@ export default function Demo({ onNotify }: DemoProps) {
               </button>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {SAMPLE_IMAGES.map((sample) => (
-                <div
-                  key={sample.id}
-                  onClick={() => handleSelectSample(sample)}
-                  className="cursor-pointer rounded-xl border border-neutral-800 bg-neutral-950 p-3 hover:border-[#32FF00] transition-all flex flex-col justify-between"
-                >
-                  <div className="aspect-[4/3] w-full overflow-hidden rounded-lg bg-neutral-900">
-                    <img
-                      src={sample.dataUrl}
-                      alt={sample.title}
-                      className="h-full w-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    <h4 className="text-xs font-semibold text-white truncate">
-                      {sample.title}
+            {/* General scenes first; the penguin photo sits in its own labelled section. */}
+            <div className="mt-4 space-y-5 max-h-[70vh] overflow-y-auto pr-1">
+              {([
+                { key: 'general', title: 'General scenes (COCO models handle these well)' },
+                { key: 'research-context', title: 'Research context: penguins' },
+              ] as const).map((group) => {
+                const items = SAMPLE_IMAGES.filter((x) => x.section === group.key);
+                if (items.length === 0) return null;
+                const groupNote = items.find((x) => x.note)?.note;
+                return (
+                  <section key={group.key} className="space-y-2">
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-neutral-300">
+                      {group.title}
                     </h4>
-                    <p className="text-[11px] text-neutral-400 line-clamp-2">
-                      {sample.description}
-                    </p>
-                    <div className="pt-1 text-[10px] text-[#32FF00] font-medium">
-                      {sample.category}
+                    {groupNote && (
+                      <p className="rounded-lg border border-cyan-500/30 bg-cyan-950/30 p-2.5 text-[11px] leading-relaxed text-cyan-100">
+                        {groupNote}
+                      </p>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {items.map((sample) => (
+                    <div
+                      key={sample.id}
+                      onClick={() => handleSelectSample(sample)}
+                      className="cursor-pointer rounded-xl border border-neutral-800 bg-neutral-950 p-3 hover:border-[#32FF00] transition-all flex flex-col justify-between"
+                    >
+                      <div className="aspect-[4/3] w-full overflow-hidden rounded-lg bg-neutral-900">
+                        <img
+                          src={sample.dataUrl}
+                          alt={sample.title}
+                          className="h-full w-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        <h4 className="text-xs font-semibold text-white truncate">
+                          {sample.title}
+                        </h4>
+                        <p className="text-[11px] text-neutral-400 line-clamp-2">
+                          {sample.description}
+                        </p>
+                        <div className="pt-1 text-[10px] text-[#32FF00] font-medium">
+                          {sample.category}
+                        </div>
+                        {sample.source && (
+                          <a
+                            href={sample.source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="block text-[10px] text-neutral-500 underline hover:text-neutral-300"
+                          >
+                            Source: Ultralytics
+                          </a>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           </div>
         </div>
