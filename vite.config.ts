@@ -38,9 +38,38 @@ function ortWasmAssets(): Plugin {
   };
 }
 
+/**
+ * Makes MediaPipe Tasks Vision's wasm files available at /mediapipe/wasm/ for
+ * the Form Coach (src/components/fitness/FormCoach.tsx points FilesetResolver
+ * there). They are about 29 MB in total, so like the ONNX runtime they are
+ * copied from node_modules into the build instead of being committed, and
+ * only downloaded when someone opens the Coach tab and starts it.
+ */
+function mediapipeWasmAssets(): Plugin {
+  const dir = path.resolve(__dirname, 'node_modules/@mediapipe/tasks-vision/wasm');
+  const type = (name: string) => (name.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
+  const list = () => (fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => /\.(js|wasm)$/.test(n)) : []);
+  return {
+    name: 'mediapipe-wasm-assets',
+    configureServer(server) {
+      server.middlewares.use('/mediapipe/wasm/', (req, res, next) => {
+        const name = path.basename((req.url ?? '').split('?')[0]);
+        if (!list().includes(name)) return next();
+        res.setHeader('Content-Type', type(name));
+        fs.createReadStream(path.join(dir, name)).pipe(res);
+      });
+    },
+    generateBundle() {
+      for (const name of list()) {
+        this.emitFile({type: 'asset', fileName: `mediapipe/wasm/${name}`, source: fs.readFileSync(path.join(dir, name))});
+      }
+    },
+  };
+}
+
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss(), ortWasmAssets()],
+    plugins: [react(), tailwindcss(), ortWasmAssets(), mediapipeWasmAssets()],
     resolve: {
       // Use onnxruntime-web's "extern wasm" build: it loads its wasm from the
       // /ort/ path set in browserInference.ts (see ortWasmAssets above) instead

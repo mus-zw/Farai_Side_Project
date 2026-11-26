@@ -1,0 +1,394 @@
+/**
+ * IndexedDB storage for the Fitness module, via Dexie.
+ *
+ *   sessions  saved workouts (exercises and sets embedded)
+ *   meals     one row per meal, with its date
+ *   weights   one weigh-in per day
+ *   kv        settings, the in-progress session ("draft"), and flags
+ *
+ * First run: if the old localStorage log (farai_fitness_v1) exists it is
+ * imported once (and left in place); otherwise sample data is seeded so a
+ * guest sees a working, filled-in app. Everything stays in this browser.
+ */
+import Dexie, { liveQuery, type Table } from 'dexie';
+import { useEffect, useState } from 'react';
+import {
+  DAY_TYPES,
+  DEFAULT_SETTINGS,
+  DEFAULT_TARGETS,
+  DayType,
+  Goal,
+  Meal,
+  Session,
+  SetEntry,
+  Settings,
+  WeightEntry,
+  cleanSession,
+  clampNum,
+  countedSets,
+  isObj,
+  kcalFromMacros,
+  newId,
+  newSession,
+  num,
+  parseFitnessData,
+  shiftDate,
+  str,
+  toISODate,
+} from './fitness';
+import { estimate1RM, toCSV } from './fitnessMath';
+
+interface KV {
+  key: string;
+  value: unknown;
+}
+
+class FitnessDB extends Dexie {
+  sessions!: Table<Session, string>;
+  meals!: Table<Meal, string>;
+  weights!: Table<WeightEntry, string>;
+  kv!: Table<KV, string>;
+
+  constructor() {
+    super('farai_fitness');
+    this.version(1).stores({
+      sessions: 'id, date, day',
+      meals: 'id, date',
+      weights: 'date',
+      kv: 'key',
+    });
+  }
+}
+
+export const db = new FitnessDB();
+
+const LEGACY_KEY = 'farai_fitness_v1';
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// --- Cleaning (never trust stored or imported data) -----------------------------------------
+
+export function cleanMeal(v: unknown, fallbackDate?: string): Meal | null {
+  if (!isObj(v)) return null;
+  const date = typeof v.date === 'string' && DATE_RE.test(v.date) ? v.date : fallbackDate;
+  if (!date) return null;
+  const protein = clampNum(v.protein, 0, 1000);
+  const carbs = clampNum(v.carbs, 0, 2000);
+  const fat = clampNum(v.fat, 0, 1000);
+  let kcal = clampNum(v.kcal, 0, 20000);
+  if (!kcal) kcal = kcalFromMacros(protein, carbs, fat);
+  return { id: str(v.id, newId(), 40), date, name: str(v.name, 'Meal', 60), kcal, protein, carbs, fat };
+}
+
+export function cleanWeight(v: unknown): WeightEntry | null {
+  if (!isObj(v) || typeof v.date !== 'string' || !DATE_RE.test(v.date)) return null;
+  const value = clampNum(v.value, 0, 700);
+  return value > 0 ? { date: v.date, value } : null;
+}
+
+export function cleanSettings(v: unknown): Settings {
+  const o = isObj(v) ? v : {};
+  const t = isObj(o.targets) ? o.targets : {};
+  const goals: Goal[] = ['lose', 'maintain', 'gain'];
+  return {
+    unit: o.unit === 'lb' ? 'lb' : 'kg',
+    schedule: o.schedule === 'ppl3' ? 'ppl3' : 'ppl6',
+    goal: goals.includes(o.goal as Goal) ? (o.goal as Goal) : DEFAULT_SETTINGS.goal,
+    restSeconds: Math.min(600, Math.max(15, Math.round(clampNum(o.restSeconds, DEFAULT_SETTINGS.restSeconds, 600)))),
+    autoRest: o.autoRest !== false,
+    targets: {
+      kcal: clampNum(t.kcal, DEFAULT_TARGETS.kcal, 20000),
+      protein: clampNum(t.protein, DEFAULT_TARGETS.protein, 1000),
+      carbs: clampNum(t.carbs, DEFAULT_TARGETS.carbs, 2000),
+      fat: clampNum(t.fat, DEFAULT_TARGETS.fat, 1000),
+      meals: Math.round(clampNum(t.meals, DEFAULT_TARGETS.meals, 12)),
+    },
+  };
+}
+
+// --- Settings and draft -----------------------------------------------------------------------------
+
+export async function getSettings(): Promise<Settings> {
+  return cleanSettings((await db.kv.get('settings'))?.value);
+}
+
+export async function saveSettings(next: Settings): Promise<void> {
+  await db.kv.put({ key: 'settings', value: cleanSettings(next) });
+}
+
+export async function getDraft(): Promise<Session | null> {
+  return cleanSession((await db.kv.get('draft'))?.value);
+}
+
+export async function saveDraft(draft: Session | null): Promise<void> {
+  if (draft) await db.kv.put({ key: 'draft', value: draft });
+  else await db.kv.delete('draft');
+}
+
+export async function isSeeded(): Promise<boolean> {
+  return (await db.kv.get('seeded'))?.value === true;
+}
+
+// --- Sample data (guest) -----------------------------------------------------------------------------
+
+// A tiny deterministic generator, so the sample data is the same every time.
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+const BASE_KG: [RegExp, number][] = [
+  [/squat/, 100], [/romanian|deadlift/, 100], [/leg press/, 160], [/leg curl|leg extension/, 45], [/calf/, 70],
+  [/bench/, 80], [/incline/, 28], [/overhead press|press/, 50], [/lateral/, 10], [/pushdown|extension/, 30],
+  [/row/, 70], [/pull-up|pulldown/, 60], [/face pull/, 25], [/curl/, 30],
+];
+const baseFor = (name: string) => BASE_KG.find(([re]) => re.test(name.toLowerCase()))?.[1] ?? 30;
+
+function sampleSessions(today: string): Session[] {
+  const rand = rng(7);
+  const out: Session[] = [];
+  const plan: Record<number, DayType> = { 1: 'push', 2: 'pull', 3: 'legs', 4: 'push', 5: 'pull', 6: 'legs' };
+  for (let back = 27; back >= 1; back--) {
+    const date = shiftDate(today, -back);
+    const [y, m, d] = date.split('-').map(Number);
+    const day = plan[new Date(y, m - 1, d).getDay()];
+    if (!day || rand() < 0.15) continue; // a rest day, or a missed one
+    const week = Math.floor((27 - back) / 7); // a little progress each week
+    const s = newSession(day, date);
+    s.exercises = s.exercises.map((ex, exIdx) => {
+      const base = Math.round((baseFor(ex.name) + week * 1.25) / 2.5) * 2.5;
+      const lo = Number(ex.target?.split('-')[0]) || 8;
+      const sets: SetEntry[] = Array.from({ length: 3 }, (_, i) => ({
+        weight: String(base),
+        reps: String(lo + Math.floor(rand() * 3) - (i === 2 ? 1 : 0)),
+        done: true,
+        type: 'normal',
+      }));
+      if (exIdx === 0) sets.unshift({ weight: String(Math.round((base * 0.6) / 2.5) * 2.5), reps: '8', done: true, type: 'warmup' });
+      return { ...ex, sets };
+    });
+    s.savedAt = Date.parse(`${date}T18:00:00`);
+    out.push(s);
+  }
+  return out;
+}
+
+function sampleMeals(today: string): Meal[] {
+  const rand = rng(11);
+  const out: Meal[] = [];
+  const names = ['Breakfast', 'Lunch', 'Snack', 'Dinner', 'Evening snack'];
+  for (let back = 20; back >= 0; back--) {
+    if (back % 9 === 5) continue; // a day nothing was logged
+    const date = shiftDate(today, -back);
+    const count = 3 + Math.floor(rand() * 3);
+    for (let i = 0; i < count; i++) {
+      const protein = Math.round(25 + rand() * 20);
+      const carbs = Math.round(45 + rand() * 40);
+      const fat = Math.round(12 + rand() * 14);
+      out.push({ id: newId(), date, name: names[i], protein, carbs, fat, kcal: kcalFromMacros(protein, carbs, fat) });
+    }
+  }
+  return out;
+}
+
+function sampleWeights(today: string): WeightEntry[] {
+  const rand = rng(3);
+  const out: WeightEntry[] = [];
+  for (let back = 27; back >= 0; back--) {
+    if (back % 5 === 3) continue;
+    const trend = 82 - (0.45 * (27 - back)) / 7;
+    out.push({ date: shiftDate(today, -back), value: Math.round((trend + (rand() - 0.5) * 1.2) * 10) / 10 });
+  }
+  return out;
+}
+
+/** Replace everything with sample data, as a guest would see on first visit. */
+export async function seedSampleData(): Promise<void> {
+  const today = toISODate();
+  await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
+    await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
+    await db.sessions.bulkPut(sampleSessions(today));
+    await db.meals.bulkPut(sampleMeals(today));
+    await db.weights.bulkPut(sampleWeights(today));
+    await db.kv.bulkPut([
+      { key: 'settings', value: DEFAULT_SETTINGS },
+      { key: 'seeded', value: true },
+      { key: 'initialized', value: true },
+    ]);
+  });
+}
+
+/** Remove all data (sample or yours) and start empty. */
+export async function eraseAll(): Promise<void> {
+  await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
+    await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
+    await db.kv.bulkPut([
+      { key: 'settings', value: DEFAULT_SETTINGS },
+      { key: 'seeded', value: false },
+      { key: 'initialized', value: true },
+    ]);
+  });
+}
+
+/** One-time import of the old localStorage log. Returns true if there was anything to import. */
+async function migrateLegacy(): Promise<boolean> {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(LEGACY_KEY);
+  } catch {
+    return false;
+  }
+  if (!raw) return false;
+  const old = parseFitnessData(raw);
+  const meals: Meal[] = [];
+  for (const [date, list] of Object.entries(old.meals)) {
+    for (const m of list) {
+      const clean = cleanMeal(m, date);
+      if (clean) meals.push(clean);
+    }
+  }
+  // A lone empty draft is not worth keeping over the sample data: only real history counts.
+  if (!old.sessions.length && !meals.length) return false;
+  await db.transaction('rw', db.sessions, db.meals, db.kv, async () => {
+    await db.sessions.bulkPut(old.sessions);
+    await db.meals.bulkPut(meals);
+    if (old.draft) await db.kv.put({ key: 'draft', value: old.draft });
+    await db.kv.bulkPut([
+      { key: 'settings', value: cleanSettings({ unit: old.unit, schedule: old.schedule, targets: old.targets }) },
+      { key: 'seeded', value: false },
+      { key: 'initialized', value: true },
+    ]);
+  });
+  return true;
+}
+
+let initPromise: Promise<void> | null = null;
+
+/** Open the database and run first-run setup once. Rejects if IndexedDB is unavailable. */
+export function initFitnessDb(): Promise<void> {
+  initPromise ??= (async () => {
+    await db.open();
+    if ((await db.kv.get('initialized'))?.value) return;
+    if (await migrateLegacy()) return;
+    await seedSampleData();
+  })().catch((err) => {
+    initPromise = null;
+    throw err;
+  });
+  return initPromise;
+}
+
+// --- Backup: JSON and CSV ---------------------------------------------------------------------------------
+
+export interface Backup {
+  app: 'farai-fitness';
+  version: 2;
+  exportedAt: string;
+  settings: Settings;
+  sessions: Session[];
+  meals: Meal[];
+  weights: WeightEntry[];
+}
+
+export const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
+
+export async function exportBackup(): Promise<Backup> {
+  const [settings, sessions, meals, weights] = await Promise.all([
+    getSettings(),
+    db.sessions.orderBy('date').toArray(),
+    db.meals.orderBy('date').toArray(),
+    db.weights.orderBy('date').toArray(),
+  ]);
+  return { app: 'farai-fitness', version: 2, exportedAt: new Date().toISOString(), settings, sessions, meals, weights };
+}
+
+export interface ImportSummary {
+  sessions: number;
+  meals: number;
+  weights: number;
+  skipped: number;
+}
+
+/**
+ * Replace the database with a backup file's contents. Everything is validated
+ * and sanitised first; anything malformed is skipped and counted, and a file
+ * that is not one of ours is rejected before anything is touched.
+ */
+export async function importBackup(json: unknown): Promise<ImportSummary> {
+  if (!isObj(json) || json.app !== 'farai-fitness' || ![1, 2].includes(Number(json.version))) {
+    throw new Error('This is not a Farai Fitness backup file.');
+  }
+  let skipped = 0;
+  const pick = <T,>(list: unknown, clean: (v: unknown) => T | null, max: number): T[] => {
+    const out: T[] = [];
+    for (const v of (Array.isArray(list) ? list : []).slice(0, max)) {
+      const c = clean(v);
+      if (c) out.push(c);
+      else skipped += 1;
+    }
+    return out;
+  };
+  const sessions = pick(json.sessions, cleanSession, 2000);
+  const meals = pick(json.meals, (v) => cleanMeal(v), 20000);
+  const weights = pick(json.weights, cleanWeight, 5000);
+  const settings = cleanSettings(json.settings);
+
+  await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
+    await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
+    await db.sessions.bulkPut(sessions);
+    await db.meals.bulkPut(meals);
+    await db.weights.bulkPut(weights);
+    await db.kv.bulkPut([
+      { key: 'settings', value: settings },
+      { key: 'seeded', value: false },
+      { key: 'initialized', value: true },
+    ]);
+  });
+  return { sessions: sessions.length, meals: meals.length, weights: weights.length, skipped };
+}
+
+/** One row per done set. */
+export function workoutsCsv(sessions: readonly Session[], unit: string): string {
+  const rows: (string | number)[][] = [['date', 'day', 'exercise', 'set', 'type', `weight_${unit}`, 'reps', `volume_${unit}`, `est_1rm_${unit}`]];
+  for (const s of sessions) {
+    for (const ex of s.exercises) {
+      countedSets(ex).forEach((set, i) => {
+        const w = num(set.weight);
+        const r = num(set.reps);
+        const e = set.type === 'warmup' ? null : estimate1RM(w, r);
+        rows.push([s.date, s.day, ex.name, i + 1, set.type, w, r, set.type === 'warmup' ? 0 : w * r, e ? Math.round(e.average * 10) / 10 : '']);
+      });
+    }
+  }
+  return toCSV(rows);
+}
+
+export function nutritionCsv(meals: readonly Meal[]): string {
+  return toCSV([['date', 'meal', 'kcal', 'protein_g', 'carbs_g', 'fat_g'], ...meals.map((m) => [m.date, m.name, m.kcal, m.protein, m.carbs, m.fat])]);
+}
+
+export function weightsCsv(weights: readonly WeightEntry[], unit: string): string {
+  return toCSV([['date', `weight_${unit}`], ...weights.map((w) => [w.date, w.value])]);
+}
+
+/** Saved sessions, newest first (ties on a date broken by when they were saved). */
+export async function sessionsNewestFirst(): Promise<Session[]> {
+  return (await db.sessions.toArray()).sort((a, b) => b.date.localeCompare(a.date) || b.savedAt - a.savedAt);
+}
+
+// --- React: live queries ---------------------------------------------------------------------------------------
+
+/** Re-renders with the result of a Dexie query whenever the data it reads changes. */
+export function useLive<T>(querier: () => Promise<T> | T, deps: readonly unknown[], initial: T): T {
+  const [value, setValue] = useState<T>(initial);
+  useEffect(() => {
+    const sub = liveQuery(querier).subscribe({ next: setValue, error: () => undefined });
+    return () => sub.unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return value;
+}
+
+export { DAY_TYPES };

@@ -40,9 +40,9 @@ export function toYoloText(boxes: readonly LabelBox[], imageW: number, imageH: n
   return lines.length ? lines.join('\n') + '\n' : '';
 }
 
-/** Browser download of a text file. */
-export function downloadTextFile(filename: string, text: string): void {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+/** Browser download of a text file (YOLO labels by default; pass a mime type for JSON or CSV). */
+export function downloadTextFile(filename: string, text: string, mime = 'text/plain;charset=utf-8'): void {
+  const url = URL.createObjectURL(new Blob([text], { type: mime }));
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;

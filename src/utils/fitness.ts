@@ -16,11 +16,18 @@ export const DAY_FOCUS: Record<DayType, string> = {
   legs: 'Quads, hamstrings, glutes, calves',
 };
 
+/** Warm-up sets are logged but never count towards volume, 1RM or the muscle heatmap. */
+export type SetType = 'normal' | 'warmup' | 'drop' | 'failure';
+export const SET_TYPES: readonly SetType[] = ['normal', 'warmup', 'drop', 'failure'];
+export const SET_TYPE_LABEL: Record<SetType, string> = { normal: 'Working', warmup: 'Warm-up', drop: 'Drop set', failure: 'To failure' };
+export const SET_TYPE_TAG: Record<SetType, string> = { normal: 'W', warmup: 'WU', drop: 'D', failure: 'F' };
+
 export interface SetEntry {
   /** Kept as text while editing; parsed with num(). */
   weight: string;
   reps: string;
   done: boolean;
+  type: SetType;
 }
 export interface ExerciseLog {
   id: string;
@@ -40,28 +47,64 @@ export interface Session {
 }
 export interface Meal {
   id: string;
+  /** Local calendar date, YYYY-MM-DD. */
+  date: string;
   name: string;
   kcal: number;
   protein: number;
+  carbs: number;
+  fat: number;
 }
 export interface Targets {
   kcal: number;
   protein: number;
+  carbs: number;
+  fat: number;
   meals: number;
 }
+export type Goal = 'lose' | 'maintain' | 'gain';
+export const GOAL_LABEL: Record<Goal, string> = { lose: 'Lose slowly', maintain: 'Maintain', gain: 'Gain slowly' };
+
+export interface WeightEntry {
+  /** Local calendar date, YYYY-MM-DD (one weigh-in per day). */
+  date: string;
+  /** In the user's unit at the time (kg or lb). */
+  value: number;
+}
+
+export interface Settings {
+  unit: Unit;
+  schedule: Schedule;
+  targets: Targets;
+  goal: Goal;
+  /** Rest between working sets, in seconds. */
+  restSeconds: number;
+  autoRest: boolean;
+}
+
+/** Legacy (localStorage v1) shape, only read once to migrate into IndexedDB. */
 export interface FitnessData {
   version: 1;
   unit: Unit;
   schedule: Schedule;
   targets: Targets;
   sessions: Session[];
-  meals: Record<string, Meal[]>;
+  meals: Record<string, Partial<Meal>[]>;
   /** The session being logged right now, kept so a reload does not lose it. */
   draft: Session | null;
 }
 
 // Starting points, meant to be edited. Not medical or dietary advice.
-export const DEFAULT_TARGETS: Targets = { kcal: 2500, protein: 150, meals: 4 };
+export const DEFAULT_TARGETS: Targets = { kcal: 2500, protein: 150, carbs: 280, fat: 70, meals: 4 };
+
+export const DEFAULT_SETTINGS: Settings = {
+  unit: 'kg',
+  schedule: 'ppl6',
+  targets: DEFAULT_TARGETS,
+  goal: 'maintain',
+  restSeconds: 90,
+  autoRest: true,
+};
 
 export const DEFAULT_DATA: FitnessData = {
   version: 1,
@@ -144,20 +187,30 @@ export function num(text: string | number): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-export function blankSet(): SetEntry {
-  return { weight: '', reps: '', done: false };
+export function blankSet(type: SetType = 'normal'): SetEntry {
+  return { weight: '', reps: '', done: false, type };
 }
 
 export function newExercise(name: string, target?: string, sets = 3): ExerciseLog {
   return { id: newId(), name, target, sets: Array.from({ length: sets }, blankSet) };
 }
 
-export function newSession(day: DayType, date: string = toISODate()): Session {
+/**
+ * A fresh session for a day. When earlier sessions are given, each exercise's
+ * sets start prefilled with the last time's working sets (weight and reps, not
+ * yet done), so progressing is a matter of nudging the numbers.
+ */
+export function newSession(day: DayType, date: string = toISODate(), history: readonly Session[] = []): Session {
   return {
     id: newId(),
     date,
     day,
-    exercises: TEMPLATE[day].map((e) => newExercise(e.name, e.target)),
+    exercises: TEMPLATE[day].map((e) => {
+      const ex = newExercise(e.name, e.target);
+      const prev = previousSets(history, e.name);
+      if (!prev) return ex;
+      return { ...ex, sets: prev.map((p) => ({ weight: p.weight, reps: p.reps, done: false, type: p.type })) };
+    }),
     notes: '',
     savedAt: 0,
   };
@@ -165,21 +218,27 @@ export function newSession(day: DayType, date: string = toISODate()): Session {
 
 // --- Training maths ---------------------------------------------------------------
 
-/** Sets that count: marked done, with reps. */
+/** Sets that were done, with reps (warm-ups included; they are saved in history). */
 export function countedSets(ex: ExerciseLog): SetEntry[] {
   return ex.sets.filter((s) => s.done && num(s.reps) > 0);
 }
 
-/** Volume = sum of weight x reps over the counted sets. */
+/** Done sets that count towards volume and progress: everything except warm-ups. */
+export function workingSets(ex: ExerciseLog): SetEntry[] {
+  return countedSets(ex).filter((s) => s.type !== 'warmup');
+}
+
+/** Volume = sum of weight x reps over the working sets. */
 export function sessionVolume(s: Session): number {
   return s.exercises.reduce(
-    (total, ex) => total + countedSets(ex).reduce((t, set) => t + num(set.weight) * num(set.reps), 0),
+    (total, ex) => total + workingSets(ex).reduce((t, set) => t + num(set.weight) * num(set.reps), 0),
     0
   );
 }
 
+/** Number of working sets (warm-ups excluded). */
 export function sessionSetCount(s: Session): number {
-  return s.exercises.reduce((n, ex) => n + countedSets(ex).length, 0);
+  return s.exercises.reduce((n, ex) => n + workingSets(ex).length, 0);
 }
 
 const norm = (name: string) => name.trim().toLowerCase();
@@ -189,7 +248,7 @@ export function previousSets(sessions: readonly Session[], exerciseName: string)
   for (const s of sessions) {
     const ex = s.exercises.find((e) => norm(e.name) === norm(exerciseName));
     if (!ex) continue;
-    const sets = countedSets(ex);
+    const sets = workingSets(ex);
     if (sets.length) return sets;
   }
   return null;
@@ -209,12 +268,19 @@ export function plannedDayFor(schedule: Schedule, date: Date = new Date()): DayT
 
 // --- Nutrition --------------------------------------------------------------------
 
-export function mealTotals(meals: readonly Meal[]): { kcal: number; protein: number; count: number } {
+export function mealTotals(meals: readonly Meal[]): { kcal: number; protein: number; carbs: number; fat: number; count: number } {
   return {
     kcal: meals.reduce((t, m) => t + m.kcal, 0),
     protein: meals.reduce((t, m) => t + m.protein, 0),
+    carbs: meals.reduce((t, m) => t + m.carbs, 0),
+    fat: meals.reduce((t, m) => t + m.fat, 0),
     count: meals.length,
   };
+}
+
+/** Calories from macros (4/4/9), for when a meal is entered as grams only. */
+export function kcalFromMacros(protein: number, carbs: number, fat: number): number {
+  return Math.round(protein * 4 + carbs * 4 + fat * 9);
 }
 
 /** 0-1 progress towards a target; 0 when there is no target. */
@@ -224,14 +290,14 @@ export function progress(value: number, target: number): number {
 
 // --- Loading: never trust what is in storage ------------------------------------------
 
-const isObj = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const str = (v: unknown, fallback = '', max = 200) => (typeof v === 'string' ? v.slice(0, max) : fallback);
-const clampNum = (v: unknown, fallback: number, max: number) => {
+export const isObj = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v);
+export const str = (v: unknown, fallback = '', max = 200) => (typeof v === 'string' ? v.slice(0, max) : fallback);
+export const clampNum = (v: unknown, fallback: number, max: number) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 ? Math.min(n, max) : fallback;
 };
 
-function cleanSession(v: unknown): Session | null {
+export function cleanSession(v: unknown): Session | null {
   if (!isObj(v) || !DAY_TYPES.includes(v.day) || !/^\d{4}-\d{2}-\d{2}$/.test(str(v.date))) return null;
   const exercises: ExerciseLog[] = (Array.isArray(v.exercises) ? v.exercises : [])
     .filter(isObj)
@@ -243,7 +309,12 @@ function cleanSession(v: unknown): Session | null {
       sets: (Array.isArray(e.sets) ? e.sets : [])
         .filter(isObj)
         .slice(0, 30)
-        .map((s) => ({ weight: str(s.weight, '', 8), reps: str(s.reps, '', 5), done: s.done === true })),
+        .map((s) => ({
+          weight: str(s.weight, '', 8),
+          reps: str(s.reps, '', 5),
+          done: s.done === true,
+          type: SET_TYPES.includes(s.type) ? (s.type as SetType) : ('normal' as SetType),
+        })),
     }));
   return {
     id: str(v.id, newId(), 40),
@@ -262,7 +333,7 @@ export function parseFitnessData(raw: string | null): FitnessData {
     const v = JSON.parse(raw);
     if (!isObj(v)) return DEFAULT_DATA;
     const t = isObj(v.targets) ? v.targets : {};
-    const meals: Record<string, Meal[]> = {};
+    const meals: Record<string, Partial<Meal>[]> = {};
     if (isObj(v.meals)) {
       for (const [date, list] of Object.entries(v.meals)) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Array.isArray(list)) continue;
@@ -271,6 +342,8 @@ export function parseFitnessData(raw: string | null): FitnessData {
           name: str(m.name, 'Meal', 60),
           kcal: clampNum(m.kcal, 0, 20000),
           protein: clampNum(m.protein, 0, 1000),
+          carbs: clampNum(m.carbs, 0, 2000),
+          fat: clampNum(m.fat, 0, 1000),
         }));
       }
     }
@@ -281,6 +354,8 @@ export function parseFitnessData(raw: string | null): FitnessData {
       targets: {
         kcal: clampNum(t.kcal, DEFAULT_TARGETS.kcal, 20000),
         protein: clampNum(t.protein, DEFAULT_TARGETS.protein, 1000),
+        carbs: clampNum(t.carbs, DEFAULT_TARGETS.carbs, 2000),
+        fat: clampNum(t.fat, DEFAULT_TARGETS.fat, 1000),
         meals: Math.round(clampNum(t.meals, DEFAULT_TARGETS.meals, 12)),
       },
       sessions: (Array.isArray(v.sessions) ? v.sessions : [])

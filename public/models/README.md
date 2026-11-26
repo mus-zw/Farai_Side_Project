@@ -63,3 +63,27 @@ while paused) downloads one line per box at the current confidence:
 `class_id x_center y_center width height`, all normalised 0–1. Save it next to the
 image with the same base name (`photo.jpg` → `photo.txt`) and add a `classes.txt` /
 dataset YAML listing the names in id order, then correct the boxes in a labelling tool.
+
+## Pose model for the Form Coach (`/fitness/coach`)
+
+The Form Coach uses MediaPipe's Pose Landmarker. The wasm runtime is copied from
+`node_modules/@mediapipe/tasks-vision` into the build automatically (served at
+`/mediapipe/wasm/`, about 29 MB, downloaded only when the coach starts). The
+model itself is a separate `.task` file that is **not committed**. Provide it in
+any one of these ways:
+
+1. **Host it**: save the file(s) here, then redeploy:
+
+   ```bash
+   mkdir -p public/models/pose
+   curl -L -o public/models/pose/pose_landmarker_full.task \
+     https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task
+   curl -L -o public/models/pose/pose_landmarker_lite.task \
+     https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task
+   ```
+
+2. **Pick a file** in the coach when it reports the model missing (kept in memory, nothing uploaded).
+3. **Download once from Google's host** with the "Download and start camera" button, which loads the model
+   from `storage.googleapis.com` in the visitor's browser.
+
+Full is more accurate; Lite is faster on weak devices. Video frames never leave the browser in any case.

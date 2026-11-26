@@ -101,3 +101,214 @@ body {
 .btn-lime:active {
   transform: translateY(0);
 }
+
+/* ------------------------------------------------------------------------------------
+   Fitness theme. Everything below is scoped to [data-theme="fitness"], so none of it
+   touches the portfolio pages. The tokens are the only place the palette is defined.
+   ------------------------------------------------------------------------------------ */
+[data-theme="fitness"] {
+  --f-bg: #0a0c0f;
+  --f-surface: #12161b;
+  --f-surface-2: #1a2027;
+  --f-border: #262e38;
+  --f-text: #eaeef3;
+  --f-muted: #8b97a6;
+  --f-accent: #ff5a1f;
+  --f-accent-ink: #0a0c0f;
+  --f-accent-soft: rgba(255, 90, 31, 0.14);
+  --f-gold: #ffb020;
+  --f-good: #3ddc97;
+  --f-bad: #ff5470;
+  --f-radius: 16px;
+  --f-nav-h: 64px;
+  color-scheme: dark;
+  color: var(--f-text);
+  background: var(--f-bg);
+  font-family: var(--font-sans);
+}
+[data-theme="fitness"] .f-root {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(255, 90, 31, 0.1), transparent 55%),
+    var(--f-bg);
+  color: var(--f-text);
+}
+[data-theme="fitness"] .f-top {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px;
+  background: rgba(10, 12, 15, 0.88);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--f-border);
+}
+[data-theme="fitness"] .f-main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 16px 16px calc(var(--f-nav-h) + 96px);
+}
+[data-theme="fitness"] .f-bottomnav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: var(--f-nav-h);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(14, 17, 21, 0.96);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--f-border);
+}
+[data-theme="fitness"] .f-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--f-muted);
+  transition: color 0.15s;
+}
+[data-theme="fitness"] .f-nav-item[aria-current="page"] { color: var(--f-accent); }
+[data-theme="fitness"] .f-nav-item:hover { color: var(--f-text); }
+[data-theme="fitness"] .f-nav-item[aria-current="page"]:hover { color: var(--f-accent); }
+
+[data-theme="fitness"] .f-card {
+  background: var(--f-surface);
+  border: 1px solid var(--f-border);
+  border-radius: var(--f-radius);
+  padding: 16px;
+  min-width: 0;
+}
+[data-theme="fitness"] .f-card-accent { border-color: rgba(255, 90, 31, 0.5); }
+[data-theme="fitness"] .f-h { font-size: 15px; font-weight: 700; color: var(--f-text); font-family: var(--font-display); }
+[data-theme="fitness"] .f-muted { color: var(--f-muted); }
+[data-theme="fitness"] .f-small { font-size: 11.5px; color: var(--f-muted); }
+[data-theme="fitness"] .f-accent { color: var(--f-accent); }
+
+[data-theme="fitness"] .f-btn,
+[data-theme="fitness"] .f-btn-primary,
+[data-theme="fitness"] .f-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--f-border);
+  background: var(--f-surface-2);
+  color: var(--f-text);
+  transition: border-color 0.15s, background 0.15s, opacity 0.15s;
+}
+[data-theme="fitness"] .f-btn:hover { border-color: #3a4552; }
+[data-theme="fitness"] .f-btn-primary { background: var(--f-accent); border-color: var(--f-accent); color: var(--f-accent-ink); }
+[data-theme="fitness"] .f-btn-primary:hover { filter: brightness(1.08); }
+[data-theme="fitness"] .f-btn-danger { color: var(--f-bad); }
+[data-theme="fitness"] .f-btn:disabled,
+[data-theme="fitness"] .f-btn-primary:disabled,
+[data-theme="fitness"] .f-btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
+[data-theme="fitness"] :focus-visible { outline: 2px solid var(--f-accent); outline-offset: 2px; }
+
+[data-theme="fitness"] .f-input,
+[data-theme="fitness"] .f-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--f-border);
+  background: var(--f-bg);
+  color: var(--f-text);
+  font-size: 14px;
+}
+[data-theme="fitness"] .f-input::placeholder { color: #566170; }
+[data-theme="fitness"] .f-input:focus { border-color: var(--f-accent); outline: none; }
+[data-theme="fitness"] .f-center { text-align: center; }
+
+[data-theme="fitness"] .f-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--f-border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--f-muted);
+  background: transparent;
+  cursor: pointer;
+}
+[data-theme="fitness"] .f-chip[aria-pressed="true"] { color: var(--f-accent); border-color: var(--f-accent); background: var(--f-accent-soft); }
+
+[data-theme="fitness"] .f-track { height: 8px; border-radius: 999px; background: var(--f-surface-2); overflow: hidden; }
+[data-theme="fitness"] .f-fill { height: 100%; border-radius: 999px; background: var(--f-accent); transition: width 0.25s; }
+[data-theme="fitness"] .f-fill.over { background: var(--f-gold); }
+
+[data-theme="fitness"] .f-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  border: 1px solid var(--f-border);
+  color: var(--f-muted);
+  background: var(--f-surface-2);
+  cursor: pointer;
+}
+[data-theme="fitness"] .f-tag[data-type="warmup"] { color: #7fb4ff; border-color: #2c4a73; }
+[data-theme="fitness"] .f-tag[data-type="drop"] { color: #c79bff; border-color: #4d3a73; }
+[data-theme="fitness"] .f-tag[data-type="failure"] { color: var(--f-bad); border-color: #6b2c3a; }
+
+[data-theme="fitness"] .f-timer {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--f-nav-h) + 12px + env(safe-area-inset-bottom));
+  z-index: 45;
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: #171c22;
+  border: 1px solid var(--f-accent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+[data-theme="fitness"] .f-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+[data-theme="fitness"] .f-table th { color: var(--f-muted); font-weight: 600; text-align: right; padding: 6px 8px; }
+[data-theme="fitness"] .f-table td { text-align: right; padding: 6px 8px; border-top: 1px solid var(--f-border); }
+[data-theme="fitness"] .f-table th:first-child,
+[data-theme="fitness"] .f-table td:first-child { text-align: left; }
+
+/* One row per set. On a phone the 1RM column is dropped so Done stays on screen. */
+[data-theme="fitness"] .f-setgrid {
+  display: grid;
+  align-items: center;
+  gap: 6px;
+  grid-template-columns: 2.4rem 3.5rem minmax(0, 1fr) minmax(0, 1fr) 2.1rem 1rem;
+}
+[data-theme="fitness"] .f-setgrid .f-e1 { display: none; }
+@media (min-width: 480px) {
+  [data-theme="fitness"] .f-setgrid { grid-template-columns: 2.75rem 4.4rem minmax(0, 1fr) minmax(0, 1fr) 3.2rem 2.4rem 1.4rem; }
+  [data-theme="fitness"] .f-setgrid .f-e1 { display: block; }
+}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Toast, { ToastMessage } from './components/Toast';
@@ -7,7 +7,12 @@ import Home from './pages/Home';
 import Demo from './pages/Demo';
 import About from './pages/About';
 import Contact from './pages/Contact';
-import Fitness from './pages/Fitness';
+import FitnessLayout from './components/fitness/FitnessLayout';
+import TrainPage from './pages/fitness/TrainPage';
+import NutritionPage from './pages/fitness/NutritionPage';
+import ProgressPage from './pages/fitness/ProgressPage';
+import CoachPage from './pages/fitness/CoachPage';
+import MorePage from './pages/fitness/MorePage';
 import { ProfileProvider } from './components/ProfileProvider';
 import ProfileModal from './components/ProfileModal';
 
@@ -54,22 +59,37 @@ export default function App() {
     <BrowserRouter>
       <ScrollHandler />
       <div className="flex min-h-screen flex-col bg-[#0F1419] text-[#CCCCCC] font-sans selection:bg-[#32FF00] selection:text-[#0F1419]">
-        <Navbar />
+        <Routes>
+          {/* The fitness area has its own layout: no portfolio navbar or footer. */}
+          <Route path="/fitness" element={<FitnessLayout onNotify={addNotification} />}>
+            <Route index element={<TrainPage />} />
+            <Route path="nutrition" element={<NutritionPage />} />
+            <Route path="progress" element={<ProgressPage />} />
+            <Route path="coach" element={<CoachPage />} />
+            <Route path="more" element={<MorePage />} />
+          </Route>
 
-        <main className="flex-1">
-          <Routes>
+          <Route
+            element={
+              <>
+                <Navbar />
+                <main className="flex-1">
+                  <Outlet />
+                </main>
+                <Footer />
+              </>
+            }
+          >
             <Route path="/" element={<Home />} />
             <Route path="/home" element={<Home />} />
             <Route path="/demo" element={<Demo onNotify={addNotification} />} />
-            <Route path="/fitness" element={<Fitness onNotify={addNotification} />} />
             <Route path="/about" element={<About />} />
             <Route path="/contact" element={<Contact onNotify={addNotification} />} />
             {/* Fallback route */}
             <Route path="*" element={<Home />} />
-          </Routes>
-        </main>
+          </Route>
+        </Routes>
 
-        <Footer />
         <ProfileModal />
         <Toast toasts={toasts} onDismiss={dismissNotification} />
       </div>
