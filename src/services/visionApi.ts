@@ -29,6 +29,9 @@ export interface AnalysisOptions {
 
 export interface VisionDetectionResult extends DetectionResponse {
   metadata?: ImageMetadata;
+  // In-browser runs only: for exporting YOLO annotations.
+  class_names?: string[];
+  raw_detections?: { classId: number; className: string; score: number; box: [number, number, number, number] }[];
 }
 
 /**

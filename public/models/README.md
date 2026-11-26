@@ -32,3 +32,34 @@ Notes: larger models and 960 are much slower, especially on the WASM (CPU)
 fallback, and every model is a one-time download the browser then caches.
 Committing the larger files makes the repo and the deployed site heavier; Vercel
 serves them statically. Only the model the visitor picks is downloaded.
+
+## Custom-class models (e.g. the single-class penguin detector)
+
+The decoder reads the class count from the ONNX output (`1 x (4 + numClasses) x N`),
+so a model with its own classes works without code changes. A single-class model
+outputs `1x5x8400` at 640. Class names come from the catalog entry in
+`src/utils/browserModels.ts` (`penguin` → `['penguin']`); if the count and the list
+disagree the page shows `class_0`, `class_1`, … instead of wrong names.
+
+To add a fine-tuned penguin checkpoint:
+
+```bash
+# After training with Ultralytics (nc: 1, names: [penguin]):
+yolo export model=runs/detect/train/weights/best.pt format=onnx imgsz=640 opset=17 simplify=True
+cp runs/detect/train/weights/best.onnx public/models/penguin.onnx
+# optional 960 variant, trained/exported at 960:
+#   yolo export model=best.pt format=onnx imgsz=960 opset=17 simplify=True  ->  public/models/penguin-960.onnx
+```
+
+Then pick "Penguin (custom, 1 class)" on `/demo` → In this browser. The file must be
+a static-shape export (no `dynamic`, `half` or `nms`) at the chosen size. For another
+custom model, add an entry to `BROWSER_MODELS` with its `id` (the file prefix) and
+`classNames`, and extend `BrowserModelId`.
+
+## Exporting labels for review and retraining
+
+In browser mode, **Export YOLO Labels (.txt)** (under the image, or beside the video
+while paused) downloads one line per box at the current confidence:
+`class_id x_center y_center width height`, all normalised 0–1. Save it next to the
+image with the same base name (`photo.jpg` → `photo.txt`) and add a `classes.txt` /
+dataset YAML listing the names in id order, then correct the boxes in a labelling tool.

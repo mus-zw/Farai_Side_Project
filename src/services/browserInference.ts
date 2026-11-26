@@ -2,9 +2,8 @@ import type * as OrtNs from 'onnxruntime-web';
 import { DetectionResponse, ImageMetadata } from '../types';
 import {
   INPUT_SIZE,
-  NUM_ANCHORS,
-  NUM_CLASSES,
   computeLetterbox,
+  inferOutputLayout,
   decodeOutput,
   groupByClass,
   classColorHex,
@@ -17,6 +16,7 @@ import {
   BrowserModelConfig,
   DEFAULT_MODEL_CONFIG,
   anchorsForSize,
+  classNamesFor,
   configKey,
   modelFileName,
   sameConfig,
@@ -324,7 +324,10 @@ function letterboxToTensorData(bitmap: CanvasImageSource, lb: ReturnType<typeof 
   return rgbaToChw(ctx.getImageData(0, 0, size, size).data, size);
 }
 
-async function runModel(model: BrowserModel, input: Float32Array): Promise<{ output: Float32Array; model: BrowserModel }> {
+async function runModel(
+  model: BrowserModel,
+  input: Float32Array
+): Promise<{ output: Float32Array; model: BrowserModel; numClasses: number; classNames: readonly string[] }> {
   const ort = await importOrt();
   const size = model.config.size;
   const feed = (m: BrowserModel) => ({
@@ -342,15 +345,17 @@ async function runModel(model: BrowserModel, input: Float32Array): Promise<{ out
   }
 
   const tensor = results[used.session.outputNames[0]];
-  const dims = tensor.dims.join('x');
+  // The class count is whatever the model outputs (80 for COCO, 1 for a penguin-only
+  // checkpoint); only the anchor count has to match the input size.
+  const { numClasses, numAnchors } = inferOutputLayout(tensor.dims);
   const anchors = anchorsForSize(size);
-  if (dims !== `1x${4 + NUM_CLASSES}x${anchors}`) {
+  if (numAnchors !== anchors) {
     throw new Error(
-      `Unexpected model output shape ${dims}; expected 1x${4 + NUM_CLASSES}x${anchors} for ${modelFileName(model.config)}. ` +
+      `Unexpected model output shape ${tensor.dims.join('x')} for ${modelFileName(used.config)}: expected ${anchors} predictions at ${size}×${size}. ` +
         `Was the file exported at imgsz=${size}?`
     );
   }
-  return { output: tensor.data as Float32Array, model: used };
+  return { output: tensor.data as Float32Array, model: used, numClasses, classNames: classNamesFor(used.config, numClasses) };
 }
 
 function renderAnnotated(bitmap: ImageBitmap, dets: Detection[]): string {
@@ -391,7 +396,14 @@ function renderAnnotated(bitmap: ImageBitmap, dets: Detection[]): string {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export type BrowserDetectionResult = DetectionResponse & { inference_engine: BrowserBackend; metadata?: ImageMetadata };
+export type BrowserDetectionResult = DetectionResponse & {
+  inference_engine: BrowserBackend;
+  metadata?: ImageMetadata;
+  /** The model's class names, index = class id (needed to export YOLO labels). */
+  class_names: string[];
+  /** Raw boxes in source pixels, with class ids, for exporting annotations. */
+  raw_detections: { classId: number; className: string; score: number; box: [number, number, number, number] }[];
+};
 
 /**
  * Detect objects in an image, in the browser. The result has the same shape
@@ -427,7 +439,12 @@ export function detectInBrowser(
       const t2 = performance.now();
       if (options.signal?.aborted) throw canceled();
 
-      const dets = decodeOutput(run.output, lb, { confidence, numAnchors: anchorsForSize(size) });
+      const dets = decodeOutput(run.output, lb, {
+        confidence,
+        numAnchors: anchorsForSize(size),
+        numClasses: run.numClasses,
+        classNames: run.classNames,
+      });
       const t3 = performance.now();
 
       options.onProgress?.(90);
@@ -453,6 +470,8 @@ export function detectInBrowser(
         nms_free: false,
         inference_engine: model.backend,
         metadata: meta,
+        class_names: [...run.classNames],
+        raw_detections: dets,
       };
     } finally {
       bitmap.close();
@@ -462,6 +481,10 @@ export function detectInBrowser(
 
 export interface FrameDetectionResult {
   detections: Detection[];
+  /** Source frame size the boxes are in. */
+  width: number;
+  height: number;
+  classNames: readonly string[];
   backend: BrowserBackend;
   /** Preprocess + inference + decode, in ms. */
   ms: number;
@@ -486,7 +509,12 @@ export function detectFrameInBrowser(
     const lb = computeLetterbox(width, height, size);
     const input = letterboxToTensorData(source, lb, size);
     const run = await runModel(model, input);
-    const detections = decodeOutput(run.output, lb, { confidence, numAnchors: anchorsForSize(size) });
-    return { detections, backend: run.model.backend, ms: performance.now() - t0 };
+    const detections = decodeOutput(run.output, lb, {
+      confidence,
+      numAnchors: anchorsForSize(size),
+      numClasses: run.numClasses,
+      classNames: run.classNames,
+    });
+    return { detections, width, height, classNames: run.classNames, backend: run.model.backend, ms: performance.now() - t0 };
   });
 }

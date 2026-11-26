@@ -52,7 +52,8 @@ import {
   parseConfig,
   sameConfig,
 } from '../utils/browserModels';
-import { Video } from 'lucide-react';
+import { Video, FileText } from 'lucide-react';
+import { baseName, downloadTextFile, toYoloText } from '../utils/yoloLabels';
 
 interface DemoProps {
   onNotify: (type: 'success' | 'error' | 'info', message: string) => void;
@@ -547,6 +548,24 @@ export default function Demo({ onNotify }: DemoProps) {
   };
 
   // Download utilities
+  // YOLO annotations for the image on screen (in-browser runs only), at the current confidence.
+  const handleExportYoloLabels = () => {
+    if (!detectionResult?.raw_detections) return;
+    const text = toYoloText(
+      detectionResult.raw_detections,
+      detectionResult.image_width ?? imageMetadata?.width ?? 0,
+      detectionResult.image_height ?? imageMetadata?.height ?? 0
+    );
+    const name = `${baseName(currentFile?.name || activeSampleId || 'image')}.txt`;
+    downloadTextFile(name, text);
+    onNotify(
+      'success',
+      `Exported ${detectionResult.raw_detections.length} box(es) to ${name}. Class ids follow this model: ${(detectionResult.class_names ?? [])
+        .map((n, i) => `${i}=${n}`)
+        .join(', ')}`
+    );
+  };
+
   const handleDownloadAnnotated = () => {
     if (!detectionResult?.annotated_image_base64) return;
     const link = document.createElement('a');
@@ -1076,6 +1095,24 @@ export default function Demo({ onNotify }: DemoProps) {
               </div>
             )}
           </div>
+
+          {/* Browser mode: boxes as normalised YOLO labels, for review and retraining */}
+          {engine === 'browser' && detectionResult?.raw_detections && (
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <button
+                type="button"
+                data-testid="export-yolo-labels"
+                onClick={handleExportYoloLabels}
+                className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-neutral-700 px-3.5 py-1.5 font-semibold text-neutral-200 hover:border-neutral-500"
+              >
+                <FileText className="h-3.5 w-3.5" /> Export YOLO Labels (.txt)
+              </button>
+              <span className="text-neutral-500">
+                {detectionResult.raw_detections.length} box(es) at {Math.round(confidenceThreshold * 100)}% confidence · class 0 ={' '}
+                {detectionResult.class_names?.[0] ?? '—'}
+              </span>
+            </div>
+          )}
 
           {/* Results Display Component with BeforeAfterSlider & ConfidenceSlider */}
           {originalImageUrl && detectionResult && (

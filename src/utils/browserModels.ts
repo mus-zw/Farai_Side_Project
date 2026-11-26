@@ -14,7 +14,9 @@
  * See public/models/README.md for the export commands.
  */
 
-export type BrowserModelId = 'yolo11n' | 'yolo11s' | 'yolo11m';
+import { COCO_CLASSES } from './cocoClasses';
+
+export type BrowserModelId = 'yolo11n' | 'yolo11s' | 'yolo11m' | 'penguin';
 export type BrowserInputSize = 640 | 960;
 
 export interface BrowserModelConfig {
@@ -27,12 +29,20 @@ export interface BrowserModelInfo {
   label: string;
   /** Approximate fp32 file size at 640, for the UI. A 960 export is about the same size. */
   approxMB: number;
+  /**
+   * This model's class names, index = class id. null means the 80 COCO classes.
+   * The class COUNT is always read from the ONNX output; this list only supplies
+   * the names (see classNamesFor).
+   */
+  classNames: readonly string[] | null;
 }
 
 export const BROWSER_MODELS: readonly BrowserModelInfo[] = [
-  { id: 'yolo11n', label: 'YOLO11n (fastest)', approxMB: 11 },
-  { id: 'yolo11s', label: 'YOLO11s (balanced)', approxMB: 38 },
-  { id: 'yolo11m', label: 'YOLO11m (most accurate)', approxMB: 80 },
+  { id: 'yolo11n', label: 'YOLO11n (fastest)', approxMB: 11, classNames: null },
+  { id: 'yolo11s', label: 'YOLO11s (balanced)', approxMB: 38, classNames: null },
+  { id: 'yolo11m', label: 'YOLO11m (most accurate)', approxMB: 80, classNames: null },
+  // A fine-tuned single-class checkpoint. Not committed: add penguin.onnx (see public/models/README.md).
+  { id: 'penguin', label: 'Penguin (custom, 1 class)', approxMB: 11, classNames: ['penguin'] },
 ];
 
 export const BROWSER_INPUT_SIZES: readonly BrowserInputSize[] = [640, 960];
@@ -70,4 +80,16 @@ export function anchorsForSize(size: number): number {
 export function parseConfig(modelId: unknown, size: unknown): BrowserModelConfig {
   const s = Number(size);
   return isBrowserModelId(modelId) && isBrowserInputSize(s) ? { modelId, size: s } : DEFAULT_MODEL_CONFIG;
+}
+
+/**
+ * Names for a model whose output has `numClasses` class channels. The count
+ * comes from the ONNX itself; a catalog list is used only when its length
+ * matches, so a mislabelled export shows `class_N` instead of wrong names.
+ */
+export function classNamesFor(cfg: BrowserModelConfig, numClasses: number): readonly string[] {
+  const listed = BROWSER_MODELS.find((m) => m.id === cfg.modelId)?.classNames ?? null;
+  const names = listed ?? (numClasses === COCO_CLASSES.length ? COCO_CLASSES : null);
+  if (names && names.length === numClasses) return names;
+  return Array.from({ length: numClasses }, (_, i) => `class_${i}`);
 }

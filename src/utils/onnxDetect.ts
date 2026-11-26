@@ -16,13 +16,26 @@ import { COCO_CLASSES } from './cocoClasses';
  */
 
 export const INPUT_SIZE = 640; // the default; other exports (e.g. 960) pass their size explicitly
-export const NUM_CLASSES = 80;
+export const NUM_CLASSES = 80; // COCO. Custom models differ: read it from the output with inferOutputLayout().
 export const NUM_ANCHORS = 8400;
 export const PAD_VALUE = 114; // the grey Ultralytics pads with
 export const DEFAULT_IOU_THRESHOLD = 0.45; // matches the backend's IOU_THRESHOLD
 export const MAX_DETECTIONS = 300;
 // Bounds the quadratic NMS pass when the confidence threshold is very low.
 const MAX_NMS_CANDIDATES = 3000;
+
+/**
+ * Class and anchor counts from a YOLO output tensor's dims, [1, 4 + numClasses, numAnchors].
+ * A single-class model has 5 channels, COCO has 84. Throws on anything that is not that layout.
+ */
+export function inferOutputLayout(dims: readonly number[]): { numClasses: number; numAnchors: number } {
+  if (dims.length !== 3 || dims[0] !== 1 || !(dims[1] >= 5) || !(dims[2] > 0)) {
+    throw new Error(
+      `Unexpected model output shape ${dims.join('x')}; expected 1 x (4 + numClasses) x numAnchors, e.g. 1x84x8400 or 1x5x8400.`
+    );
+  }
+  return { numClasses: dims[1] - 4, numAnchors: dims[2] };
+}
 
 export interface Letterbox {
   /** Source image size. */

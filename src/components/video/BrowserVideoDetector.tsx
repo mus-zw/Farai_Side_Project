@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Upload, Play, Square, AlertTriangle } from 'lucide-react';
+import { Upload, Play, Square, AlertTriangle, FileText } from 'lucide-react';
 import ConfidenceSlider from '../ConfidenceSlider';
 import { classColorHex, Detection } from '../../utils/onnxDetect';
 import { layoutLabel, readableTextColor } from '../../utils/videoOverlay';
+import { baseName, downloadTextFile, toYoloText } from '../../utils/yoloLabels';
 
 /**
  * Video detection that runs entirely in this browser: the chosen file is played
@@ -58,6 +59,9 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
   const [detecting, setDetecting] = useState(false);
   const [phase, setPhase] = useState('');
   const [stats, setStats] = useState<Stats>(EMPTY_STATS);
+  const [paused, setPaused] = useState(true);
+  const lastFrameRef = useRef<{ width: number; height: number; time: number } | null>(null);
+  const fileNameRef = useRef('video');
 
   // Mutable loop state lives in refs so the frame callbacks never see stale values.
   const detectingRef = useRef(false);
@@ -148,6 +152,7 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
       if (generation !== generationRef.current) return; // stopped, replaced or unmounted meanwhile
 
       lastDetectionsRef.current = res.detections;
+      lastFrameRef.current = { width: res.width, height: res.height, time: video.currentTime };
       drawDetections(res.detections);
 
       const perClass: Record<string, number> = {};
@@ -285,7 +290,9 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
       // Boxes belong to the old frame; hide them until the new one is checked.
       if (detectingRef.current) clearCanvas();
     };
+    const onPause = () => setPaused(true);
     const onPlay = () => {
+      setPaused(false);
       if (detectingRef.current) {
         lastRafTimeRef.current = -1;
         scheduleNext();
@@ -298,12 +305,14 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
     video.addEventListener('seeking', onSeeking);
     video.addEventListener('seeked', refreshStill);
     video.addEventListener('pause', refreshStill);
+    video.addEventListener('pause', onPause);
     video.addEventListener('play', onPlay);
     video.addEventListener('ended', onEnded);
     return () => {
       video.removeEventListener('seeking', onSeeking);
       video.removeEventListener('seeked', refreshStill);
       video.removeEventListener('pause', refreshStill);
+      video.removeEventListener('pause', onPause);
       video.removeEventListener('play', onPlay);
       video.removeEventListener('ended', onEnded);
     };
@@ -353,6 +362,9 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
     setStats(EMPTY_STATS);
     liveStatsRef.current = { ...EMPTY_STATS };
     setFileInfo(null);
+    fileNameRef.current = file.name;
+    lastDetectionsRef.current = [];
+    lastFrameRef.current = null;
 
     const next = URL.createObjectURL(file);
     const probe = document.createElement('video');
@@ -388,6 +400,16 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
       setError('Could not read this video (unsupported codec). Try an MP4 (H.264) or WebM file.');
     };
     probe.src = next;
+  };
+
+  // YOLO labels for the frame on screen. Only offered while paused, so the boxes match that frame.
+  const exportFrameLabels = () => {
+    const frame = lastFrameRef.current;
+    if (!frame) return;
+    const text = toYoloText(lastDetectionsRef.current, frame.width, frame.height);
+    const name = `${baseName(fileNameRef.current)}_t${frame.time.toFixed(2)}s.txt`;
+    downloadTextFile(name, text);
+    onNotify('success', `Exported ${lastDetectionsRef.current.length} box(es) from this frame to ${name}.`);
   };
 
   // --- Render ---------------------------------------------------------------------
@@ -513,6 +535,19 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
               ))}
             </div>
           )}
+
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <button
+              type="button"
+              data-testid="export-video-yolo-labels"
+              onClick={exportFrameLabels}
+              disabled={!detecting || !paused || stats.analysed === 0 || phase !== ''}
+              className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-neutral-700 px-3.5 py-1.5 font-semibold text-neutral-200 hover:border-neutral-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <FileText className="h-3.5 w-3.5" /> Export YOLO Labels (.txt)
+            </button>
+            <span className="text-neutral-500">Pause on a frame, with detection on, to export its boxes.</span>
+          </div>
 
           <ConfidenceSlider
             value={confidenceThreshold}
