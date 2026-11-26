@@ -15,7 +15,7 @@ import { COCO_CLASSES } from './cocoClasses';
  * The scores are already sigmoid-activated and there is no objectness row.
  */
 
-export const INPUT_SIZE = 640;
+export const INPUT_SIZE = 640; // the default; other exports (e.g. 960) pass their size explicitly
 export const NUM_CLASSES = 80;
 export const NUM_ANCHORS = 8400;
 export const PAD_VALUE = 114; // the grey Ultralytics pads with

@@ -42,6 +42,16 @@ import Gallery from '../components/Gallery';
 import Analytics from '../components/Analytics';
 import FloatingActions from '../components/FloatingActions';
 import VideoProcessor from '../components/video/VideoProcessor';
+import {
+  BROWSER_INPUT_SIZES,
+  BROWSER_MODELS,
+  BrowserModelConfig,
+  DEFAULT_MODEL_CONFIG,
+  configKey,
+  modelFileName,
+  parseConfig,
+  sameConfig,
+} from '../utils/browserModels';
 import { Video } from 'lucide-react';
 
 interface DemoProps {
@@ -52,6 +62,9 @@ type DemoTabMode = 'single' | 'batch' | 'compare' | 'analytics';
 
 // Remembers whether the visitor chose to run detection in their browser.
 const ENGINE_STORAGE_KEY = 'farai_cv_engine';
+// ...and which model and input size it used.
+const MODEL_STORAGE_KEY = 'farai_cv_browser_model';
+const SIZE_STORAGE_KEY = 'farai_cv_browser_size';
 
 export default function Demo({ onNotify }: DemoProps) {
   const [searchParams] = useSearchParams();
@@ -85,6 +98,19 @@ export default function Demo({ onNotify }: DemoProps) {
   const [browserBackend, setBrowserBackend] = useState<'webgpu' | 'wasm' | null>(null);
   const [browserNote, setBrowserNote] = useState<string | null>(null);
   const [browserLoadError, setBrowserLoadError] = useState<string | null>(null);
+  // Which ONNX model and input size to run, and which one actually loaded
+  // (they differ when the chosen file is not in public/models/).
+  const [browserModelCfg, setBrowserModelCfg] = useState<BrowserModelConfig>(() => {
+    try {
+      return parseConfig(localStorage.getItem(MODEL_STORAGE_KEY), localStorage.getItem(SIZE_STORAGE_KEY));
+    } catch {
+      return DEFAULT_MODEL_CONFIG;
+    }
+  });
+  const browserModelCfgRef = useRef<BrowserModelConfig>(browserModelCfg);
+  const [browserLoadedCfg, setBrowserLoadedCfg] = useState<BrowserModelConfig | null>(null);
+  // Which (model, size) files exist in public/models/, once probed.
+  const [modelAvailability, setModelAvailability] = useState<Record<string, boolean>>({});
 
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
@@ -134,11 +160,17 @@ export default function Demo({ onNotify }: DemoProps) {
 
   // Load the in-browser runtime and model ahead of the first image, so the
   // wait (about 40 MB on the very first visit) shows up in the engine bar.
-  const preloadBrowserModel = useCallback(() => {
+  const preloadBrowserModel = useCallback((cfg: BrowserModelConfig = browserModelCfgRef.current) => {
     setBrowserLoadError(null);
     import('../services/browserInference')
-      .then(({ loadBrowserModel }) => loadBrowserModel(setBrowserPhase))
+      .then(({ loadBrowserModel, setActiveBrowserModel }) => {
+        setActiveBrowserModel(cfg);
+        return loadBrowserModel(setBrowserPhase, cfg);
+      })
       .then((model) => {
+        // Ignore a load that finished after the visitor picked something else.
+        if (!sameConfig(cfg, browserModelCfgRef.current)) return;
+        setBrowserLoadedCfg(model.config);
         setBrowserBackend(model.backend);
         setBrowserNote(model.fallbackReason ?? null);
         setBrowserPhase('');
@@ -148,6 +180,25 @@ export default function Demo({ onNotify }: DemoProps) {
         setBrowserPhase('');
       });
   }, []);
+
+  // Probe which model files exist, so the pickers can say "not added" up front.
+  useEffect(() => {
+    if (engine !== 'browser') return;
+    let cancelled = false;
+    import('../services/browserInference').then(async ({ isModelAvailable }) => {
+      const found: Record<string, boolean> = {};
+      for (const m of BROWSER_MODELS) {
+        for (const size of BROWSER_INPUT_SIZES) {
+          const cfg = { modelId: m.id, size };
+          found[configKey(cfg)] = await isModelAvailable(cfg);
+        }
+      }
+      if (!cancelled) setModelAvailability(found);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [engine]);
 
   const chooseEngine = useCallback(
     (next: InferenceEngine) => {
@@ -235,6 +286,7 @@ export default function Demo({ onNotify }: DemoProps) {
       const options: AnalysisOptions = {
         confidenceThreshold,
         engine: engineOverride ?? engine,
+        modelConfig: browserModelCfg,
         onPhase: setBrowserPhase,
         signal: abortControllerRef.current.signal,
         onProgress: (p) => {
@@ -289,6 +341,47 @@ export default function Demo({ onNotify }: DemoProps) {
     }
   };
 
+  // Pick another model or input size: load it, then re-run the image on screen with it.
+  const chooseBrowserModel = (next: BrowserModelConfig) => {
+    if (sameConfig(next, browserModelCfgRef.current)) return;
+    browserModelCfgRef.current = next;
+    setBrowserModelCfg(next);
+    try {
+      localStorage.setItem(MODEL_STORAGE_KEY, next.modelId);
+      localStorage.setItem(SIZE_STORAGE_KEY, String(next.size));
+    } catch {
+      // Not persisting the choice is fine.
+    }
+    setBrowserBackend(null);
+    setBrowserNote(null);
+    setBrowserLoadedCfg(null);
+    preloadBrowserModel(next);
+
+    if (!currentFile || engine !== 'browser') return;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setStatus('analyzing');
+    detectObjects(
+      currentFile,
+      { confidenceThreshold, engine, modelConfig: next, onPhase: setBrowserPhase, signal: controller.signal },
+      imageMetadata || undefined
+    )
+      .then((result) => {
+        noteBrowserResult(result);
+        setDetectionResult(result);
+        setStatus('complete');
+        setErrorMessage(null);
+      })
+      .catch((err: any) => {
+        if (controller.signal.aborted) return;
+        const msg = err?.message || 'Failed to re-run detection.';
+        setStatus('error');
+        setErrorMessage(msg);
+        onNotify('error', msg);
+      });
+  };
+
   // Re-run inference when the confidence threshold changes. The slider fires
   // on every step while dragging, so debounce, and abort any request still
   // in flight so a stale result can't land after a newer one.
@@ -304,7 +397,7 @@ export default function Demo({ onNotify }: DemoProps) {
       try {
         const result = await detectObjects(
           currentFile,
-          { confidenceThreshold: threshold, engine, onPhase: setBrowserPhase, signal: controller.signal },
+          { confidenceThreshold: threshold, engine, modelConfig: browserModelCfg, onPhase: setBrowserPhase, signal: controller.signal },
           imageMetadata || undefined
         );
         noteBrowserResult(result);
@@ -735,12 +828,53 @@ export default function Demo({ onNotify }: DemoProps) {
                   {browserLoadError ? (
                     <span className="text-rose-300" data-testid="browser-load-error">{browserLoadError}</span>
                   ) : browserBackend ? (
-                    <span className="font-mono text-white">
-                      yolo11n.onnx · {browserBackend === 'webgpu' ? 'WebGPU' : 'WASM (CPU)'} · 640×640
+                    <span className="font-mono text-white" data-testid="browser-model-label">
+                      {modelFileName(browserLoadedCfg ?? browserModelCfg)} · {browserBackend === 'webgpu' ? 'WebGPU' : 'WASM (CPU)'} ·{' '}
+                      {(browserLoadedCfg ?? browserModelCfg).size}×{(browserLoadedCfg ?? browserModelCfg).size}
                     </span>
                   ) : (
                     <span className="text-amber-300">{browserPhase || 'Starting…'}</span>
                   )}
+                </div>
+                {/* Model and input size. Files that are not in public/models/ fall back to yolo11n @ 640. */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
+                  <label className="flex items-center gap-2 text-neutral-400">
+                    Model
+                    <select
+                      data-testid="browser-model-select"
+                      value={browserModelCfg.modelId}
+                      onChange={(e) => chooseBrowserModel(parseConfig(e.target.value, browserModelCfg.size))}
+                      className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200"
+                    >
+                      {BROWSER_MODELS.map((m) => {
+                        const missing = modelAvailability[configKey({ modelId: m.id, size: browserModelCfg.size })] === false;
+                        return (
+                          <option key={m.id} value={m.id}>
+                            {m.label} · ~{m.approxMB} MB{missing ? ' (not added)' : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-neutral-400">
+                    Input size
+                    <select
+                      data-testid="browser-size-select"
+                      value={browserModelCfg.size}
+                      onChange={(e) => chooseBrowserModel(parseConfig(browserModelCfg.modelId, e.target.value))}
+                      className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200"
+                    >
+                      {BROWSER_INPUT_SIZES.map((size) => {
+                        const missing = modelAvailability[configKey({ modelId: browserModelCfg.modelId, size })] === false;
+                        return (
+                          <option key={size} value={size}>
+                            {size}×{size}
+                            {missing ? ' (not added)' : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </label>
                 </div>
                 {browserNote && !browserLoadError && <p className="text-[11px] text-neutral-500">{browserNote}</p>}
                 {!browserBackend && !browserLoadError && (

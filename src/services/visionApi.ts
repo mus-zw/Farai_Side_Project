@@ -2,6 +2,7 @@ import axios, { AxiosProgressEvent } from 'axios';
 import { DetectionResponse, ImageMetadata } from '../types';
 import { formatBytes } from '../utils/formatters';
 import { apiUrl, toApiError } from './apiClient';
+import type { BrowserModelConfig } from '../utils/browserModels';
 
 export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 // Generous on purpose: a cold model load on the server can take tens of
@@ -22,6 +23,8 @@ export interface AnalysisOptions {
   engine?: InferenceEngine;
   // In-browser runs only: what it is doing right now (loading, downloading...).
   onPhase?: (message: string) => void;
+  // In-browser runs only: which ONNX model and input size. Defaults to the active selection.
+  modelConfig?: BrowserModelConfig;
 }
 
 export interface VisionDetectionResult extends DetectionResponse {

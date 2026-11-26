@@ -13,6 +13,14 @@ import {
   Detection,
 } from '../utils/onnxDetect';
 import { layoutLabel, readableTextColor } from '../utils/videoOverlay';
+import {
+  BrowserModelConfig,
+  DEFAULT_MODEL_CONFIG,
+  anchorsForSize,
+  configKey,
+  modelFileName,
+  sameConfig,
+} from '../utils/browserModels';
 
 /**
  * Object detection that runs entirely in the visitor's browser: YOLO11n as an
@@ -25,10 +33,9 @@ import { layoutLabel, readableTextColor } from '../utils/videoOverlay';
  */
 
 const BASE = import.meta.env.BASE_URL;
-export const BROWSER_MODEL_URL = `${BASE}models/yolo11n.onnx`;
+export const modelUrl = (cfg: BrowserModelConfig) => `${BASE}models/${modelFileName(cfg)}`;
 // vite.config.ts serves/emits the runtime's wasm files here.
 const ORT_ASSET_BASE = `${BASE}ort/`;
-export const BROWSER_MODEL_LABEL = 'yolo11n.onnx';
 /** Larger images are downscaled before inference; the model only sees 640 px anyway. */
 export const MAX_BROWSER_IMAGE_DIM = 4096;
 
@@ -37,6 +44,8 @@ export type BrowserBackend = 'webgpu' | 'wasm';
 export type PhaseCallback = (message: string) => void;
 
 export interface BrowserModel {
+  /** Which model file and input size this session runs (may differ from the one asked for after a fallback). */
+  config: BrowserModelConfig;
   session: OrtNs.InferenceSession;
   backend: BrowserBackend;
   /** Why WebGPU was not used, when it was not. */
@@ -44,6 +53,8 @@ export interface BrowserModel {
 }
 
 export interface BrowserDetectOptions {
+  /** Model and input size; defaults to the one last selected with setActiveBrowserModel. */
+  modelConfig?: BrowserModelConfig;
   confidenceThreshold?: number;
   signal?: AbortSignal;
   onProgress?: (percent: number) => void;
@@ -53,8 +64,35 @@ export interface BrowserDetectOptions {
 // --- Loading ----------------------------------------------------------------------
 
 let ortPromise: Promise<Ort> | null = null;
-let modelPromise: Promise<BrowserModel> | null = null;
-let modelBytes: Uint8Array | null = null;
+// One loaded session per (model, size); only the default and the latest pick are kept.
+const modelPromises = new Map<string, Promise<BrowserModel>>();
+const modelBytesCache = new Map<string, Uint8Array>();
+const availabilityCache = new Map<string, Promise<boolean>>();
+let activeConfig: BrowserModelConfig = DEFAULT_MODEL_CONFIG;
+
+/** The model file is not on this host (as opposed to a download or runtime failure). */
+class ModelMissingError extends Error {}
+
+/** What loadBrowserModel() and detectFrameInBrowser() use when not told otherwise. */
+export function setActiveBrowserModel(cfg: BrowserModelConfig): void {
+  activeConfig = cfg;
+}
+export function getActiveBrowserModel(): BrowserModelConfig {
+  return activeConfig;
+}
+
+/** Whether public/models/ has the file for this config. Cached; a missing file is never an error here. */
+export function isModelAvailable(cfg: BrowserModelConfig): Promise<boolean> {
+  const key = configKey(cfg);
+  let p = availabilityCache.get(key);
+  if (!p) {
+    p = fetch(modelUrl(cfg), { method: 'HEAD' })
+      .then((res) => res.ok && !(res.headers.get('content-type') || '').includes('text/html'))
+      .catch(() => false);
+    availabilityCache.set(key, p);
+  }
+  return p;
+}
 
 function importOrt(): Promise<Ort> {
   ortPromise ??= import('onnxruntime-web')
@@ -73,20 +111,27 @@ function importOrt(): Promise<Ort> {
   return ortPromise;
 }
 
-async function fetchModel(onPhase?: PhaseCallback): Promise<Uint8Array> {
-  if (modelBytes) return modelBytes;
-  const res = await fetch(BROWSER_MODEL_URL);
+async function fetchModel(cfg: BrowserModelConfig, onPhase?: PhaseCallback): Promise<Uint8Array> {
+  const key = configKey(cfg);
+  const cached = modelBytesCache.get(key);
+  if (cached) return cached;
+  const url = modelUrl(cfg);
+  const res = await fetch(url);
+  if (res.status === 404) {
+    throw new ModelMissingError(`The model file is missing on this host (${url}).`);
+  }
   if (!res.ok) {
-    throw new Error(`Could not download the model (${BROWSER_MODEL_URL}: HTTP ${res.status}).`);
+    throw new Error(`Could not download the model (${url}: HTTP ${res.status}).`);
   }
   // A static host that rewrites unknown paths to index.html answers 200 with HTML.
   if ((res.headers.get('content-type') || '').includes('text/html')) {
-    throw new Error(`The model file is missing on this host (${BROWSER_MODEL_URL} returned a web page).`);
+    throw new ModelMissingError(`The model file is missing on this host (${url} returned a web page).`);
   }
   const total = Number(res.headers.get('content-length')) || 0;
   if (!res.body) {
-    modelBytes = new Uint8Array(await res.arrayBuffer());
-    return modelBytes;
+    const all = new Uint8Array(await res.arrayBuffer());
+    modelBytesCache.set(key, all);
+    return all;
   }
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -97,7 +142,8 @@ async function fetchModel(onPhase?: PhaseCallback): Promise<Uint8Array> {
     chunks.push(value);
     received += value.length;
     const mb = (n: number) => (n / 1048576).toFixed(1);
-    onPhase?.(total ? `Downloading model ${mb(received)} / ${mb(total)} MB…` : `Downloading model ${mb(received)} MB…`);
+    const name = modelFileName(cfg);
+    onPhase?.(total ? `Downloading ${name} ${mb(received)} / ${mb(total)} MB…` : `Downloading ${name} ${mb(received)} MB…`);
   }
   const bytes = new Uint8Array(received);
   let offset = 0;
@@ -105,7 +151,7 @@ async function fetchModel(onPhase?: PhaseCallback): Promise<Uint8Array> {
     bytes.set(c, offset);
     offset += c.length;
   }
-  modelBytes = bytes;
+  modelBytesCache.set(key, bytes);
   return bytes;
 }
 
@@ -127,23 +173,23 @@ async function createSession(ort: Ort, bytes: Uint8Array, backend: BrowserBacken
 }
 
 /** One run on blank input. WebGPU problems (unsupported ops, shader compile) show up here, not at create(). */
-async function warmUp(ort: Ort, session: OrtNs.InferenceSession): Promise<void> {
-  const blank = new ort.Tensor('float32', new Float32Array(3 * INPUT_SIZE * INPUT_SIZE), [1, 3, INPUT_SIZE, INPUT_SIZE]);
+async function warmUp(ort: Ort, session: OrtNs.InferenceSession, size: number): Promise<void> {
+  const blank = new ort.Tensor('float32', new Float32Array(3 * size * size), [1, 3, size, size]);
   await session.run({ [session.inputNames[0]]: blank });
 }
 
-async function doLoad(onPhase?: PhaseCallback): Promise<BrowserModel> {
+async function doLoad(cfg: BrowserModelConfig, onPhase?: PhaseCallback): Promise<BrowserModel> {
   onPhase?.('Loading the ONNX runtime…');
   const ort = await importOrt();
-  const bytes = await fetchModel(onPhase);
+  const bytes = await fetchModel(cfg, onPhase);
 
   let fallbackReason: string;
   if (await webgpuUsable()) {
     try {
       onPhase?.('Starting WebGPU…');
       const session = await createSession(ort, bytes, 'webgpu');
-      await warmUp(ort, session);
-      return { session, backend: 'webgpu' };
+      await warmUp(ort, session, cfg.size);
+      return { config: cfg, session, backend: 'webgpu' };
     } catch (err: any) {
       fallbackReason = `WebGPU failed (${err?.message || err}); using WASM.`;
     }
@@ -153,27 +199,66 @@ async function doLoad(onPhase?: PhaseCallback): Promise<BrowserModel> {
 
   onPhase?.('Starting WASM…');
   const session = await createSession(ort, bytes, 'wasm');
-  await warmUp(ort, session);
-  return { session, backend: 'wasm', fallbackReason };
+  await warmUp(ort, session, cfg.size);
+  return { config: cfg, session, backend: 'wasm', fallbackReason };
 }
 
-/** Loads (once) the runtime and model. Safe to call repeatedly; a failure is not cached. */
-export function loadBrowserModel(onPhase?: PhaseCallback): Promise<BrowserModel> {
-  modelPromise ??= doLoad(onPhase).catch((err) => {
-    modelPromise = null;
-    throw err;
-  });
-  return modelPromise;
+/** Free the sessions of models that are neither the default nor the one just loaded. */
+function evictOthers(keep: BrowserModelConfig): void {
+  const keepKeys = new Set([configKey(keep), configKey(DEFAULT_MODEL_CONFIG)]);
+  for (const [key, promise] of [...modelPromises]) {
+    if (keepKeys.has(key)) continue;
+    modelPromises.delete(key);
+    modelBytesCache.delete(key);
+    promise.then((m) => m.session.release()).catch(() => undefined);
+  }
+}
+
+/**
+ * Loads (once per model) the runtime and the requested model. Safe to call
+ * repeatedly; a failure is not cached. If the requested file is not in
+ * public/models/, the default (yolo11n at 640) is used instead and the
+ * returned model says so in `fallbackReason`.
+ */
+export function loadBrowserModel(onPhase?: PhaseCallback, config: BrowserModelConfig = activeConfig): Promise<BrowserModel> {
+  const key = configKey(config);
+  let promise = modelPromises.get(key);
+  if (!promise) {
+    promise = doLoad(config, onPhase)
+      .then((model) => {
+        evictOthers(config);
+        return model;
+      })
+      .catch(async (err) => {
+        modelPromises.delete(key);
+        if (err instanceof ModelMissingError && !sameConfig(config, DEFAULT_MODEL_CONFIG)) {
+          onPhase?.(`${modelFileName(config)} is not available; loading ${modelFileName(DEFAULT_MODEL_CONFIG)} instead…`);
+          const fallback = await loadBrowserModel(onPhase, DEFAULT_MODEL_CONFIG);
+          return {
+            ...fallback,
+            fallbackReason: `${modelFileName(config)} is not in public/models/, so ${modelFileName(DEFAULT_MODEL_CONFIG)} at ${DEFAULT_MODEL_CONFIG.size}×${DEFAULT_MODEL_CONFIG.size} is used. ${fallback.fallbackReason ?? ''}`.trim(),
+          };
+        }
+        throw err;
+      });
+    modelPromises.set(key, promise);
+  }
+  return promise;
 }
 
 /** Replace a WebGPU session that failed while running with a WASM one. */
-async function fallBackToWasm(reason: string): Promise<BrowserModel> {
+async function fallBackToWasm(config: BrowserModelConfig, reason: string): Promise<BrowserModel> {
   const ort = await importOrt();
-  const bytes = await fetchModel();
+  const bytes = await fetchModel(config);
   const session = await createSession(ort, bytes, 'wasm');
-  await warmUp(ort, session);
-  const model: BrowserModel = { session, backend: 'wasm', fallbackReason: `WebGPU failed while running (${reason}); using WASM.` };
-  modelPromise = Promise.resolve(model);
+  await warmUp(ort, session, config.size);
+  const model: BrowserModel = {
+    config,
+    session,
+    backend: 'wasm',
+    fallbackReason: `WebGPU failed while running (${reason}); using WASM.`,
+  };
+  modelPromises.set(configKey(config), Promise.resolve(model));
   return model;
 }
 
@@ -220,29 +305,30 @@ async function decodeForInference(file: Blob, meta: ImageMetadata | undefined, o
 }
 
 // One 640x640 scratch canvas, reused so per-frame video inference allocates no canvases.
-let scratch: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null = null;
+let scratch: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; size: number } | null = null;
 
-function letterboxToTensorData(bitmap: CanvasImageSource, lb: ReturnType<typeof computeLetterbox>): Float32Array {
-  if (!scratch) {
+function letterboxToTensorData(bitmap: CanvasImageSource, lb: ReturnType<typeof computeLetterbox>, size: number): Float32Array {
+  if (!scratch || scratch.size !== size) {
     const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = INPUT_SIZE;
+    canvas.width = canvas.height = size;
     const c = canvas.getContext('2d', { willReadFrequently: true });
     if (!c) throw new Error('This browser could not create a 2D canvas.');
-    scratch = { canvas, ctx: c };
+    scratch = { canvas, ctx: c, size };
   }
   const ctx = scratch.ctx;
   ctx.fillStyle = `rgb(${PAD_VALUE},${PAD_VALUE},${PAD_VALUE})`;
-  ctx.fillRect(0, 0, INPUT_SIZE, INPUT_SIZE);
+  ctx.fillRect(0, 0, size, size);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(bitmap, lb.left, lb.top, lb.newW, lb.newH);
-  return rgbaToChw(ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE).data);
+  return rgbaToChw(ctx.getImageData(0, 0, size, size).data, size);
 }
 
 async function runModel(model: BrowserModel, input: Float32Array): Promise<{ output: Float32Array; model: BrowserModel }> {
   const ort = await importOrt();
+  const size = model.config.size;
   const feed = (m: BrowserModel) => ({
-    [m.session.inputNames[0]]: new ort.Tensor('float32', input, [1, 3, INPUT_SIZE, INPUT_SIZE]),
+    [m.session.inputNames[0]]: new ort.Tensor('float32', input, [1, 3, size, size]),
   });
 
   let used = model;
@@ -251,14 +337,18 @@ async function runModel(model: BrowserModel, input: Float32Array): Promise<{ out
     results = await used.session.run(feed(used));
   } catch (err: any) {
     if (used.backend !== 'webgpu') throw err;
-    used = await fallBackToWasm(err?.message || String(err));
+    used = await fallBackToWasm(used.config, err?.message || String(err));
     results = await used.session.run(feed(used));
   }
 
   const tensor = results[used.session.outputNames[0]];
   const dims = tensor.dims.join('x');
-  if (dims !== `1x${4 + NUM_CLASSES}x${NUM_ANCHORS}`) {
-    throw new Error(`Unexpected model output shape ${dims}; expected 1x${4 + NUM_CLASSES}x${NUM_ANCHORS}.`);
+  const anchors = anchorsForSize(size);
+  if (dims !== `1x${4 + NUM_CLASSES}x${anchors}`) {
+    throw new Error(
+      `Unexpected model output shape ${dims}; expected 1x${4 + NUM_CLASSES}x${anchors} for ${modelFileName(model.config)}. ` +
+        `Was the file exported at imgsz=${size}?`
+    );
   }
   return { output: tensor.data as Float32Array, model: used };
 }
@@ -319,16 +409,17 @@ export function detectInBrowser(
     const confidence = options.confidenceThreshold ?? 0.25;
 
     options.onProgress?.(30);
-    let model = await loadBrowserModel(options.onPhase);
+    let model = await loadBrowserModel(options.onPhase, options.modelConfig ?? activeConfig);
     if (options.signal?.aborted) throw canceled();
     options.onProgress?.(60);
-    options.onPhase?.(`Running ${BROWSER_MODEL_LABEL} on ${model.backend === 'webgpu' ? 'WebGPU' : 'WASM'}…`);
+    options.onPhase?.(`Running ${modelFileName(model.config)} on ${model.backend === 'webgpu' ? 'WebGPU' : 'WASM'}…`);
 
     const t0 = performance.now();
     const bitmap = await decodeForInference(file, meta, options.onPhase);
     try {
-      const lb = computeLetterbox(bitmap.width, bitmap.height);
-      const input = letterboxToTensorData(bitmap, lb);
+      const size = model.config.size;
+      const lb = computeLetterbox(bitmap.width, bitmap.height, size);
+      const input = letterboxToTensorData(bitmap, lb, size);
       const t1 = performance.now();
 
       const run = await runModel(model, input);
@@ -336,7 +427,7 @@ export function detectInBrowser(
       const t2 = performance.now();
       if (options.signal?.aborted) throw canceled();
 
-      const dets = decodeOutput(run.output, lb, { confidence });
+      const dets = decodeOutput(run.output, lb, { confidence, numAnchors: anchorsForSize(size) });
       const t3 = performance.now();
 
       options.onProgress?.(90);
@@ -348,7 +439,7 @@ export function detectInBrowser(
         detections: groupByClass(dets),
         processing_time_ms: Math.round(t3 - t0),
         annotated_image_base64: annotated,
-        model_name: `${BROWSER_MODEL_LABEL} (in browser, ${model.backend})`,
+        model_name: `${modelFileName(model.config)} · ${size}px (in browser, ${model.backend})`,
         confidence_threshold: confidence,
         image_width: lb.srcW,
         image_height: lb.srcH,
@@ -391,10 +482,11 @@ export function detectFrameInBrowser(
   return enqueue(async () => {
     const model = await loadBrowserModel();
     const t0 = performance.now();
-    const lb = computeLetterbox(width, height);
-    const input = letterboxToTensorData(source, lb);
+    const size = model.config.size;
+    const lb = computeLetterbox(width, height, size);
+    const input = letterboxToTensorData(source, lb, size);
     const run = await runModel(model, input);
-    const detections = decodeOutput(run.output, lb, { confidence });
+    const detections = decodeOutput(run.output, lb, { confidence, numAnchors: anchorsForSize(size) });
     return { detections, backend: run.model.backend, ms: performance.now() - t0 };
   });
 }
