@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Check, Pin } from 'lucide-react';
+import { Plus, Trash2, Check, Pin, Repeat } from 'lucide-react';
 import { DAY_LABEL, DAY_TYPES, DayType, ExerciseLog, Session, SetEntry, SET_TYPES, SET_TYPE_LABEL, SET_TYPE_TAG, Settings, blankSet, cleanWeightInput, cueKey, isPristineDraft, dateLabel, newExercise, newSession, num, previousSets, sessionSetCount, sessionVolume } from '../../utils/fitness';
 import { estimate1RM } from '../../utils/fitnessMath';
 import { db, getDraft, saveDraft, setCue } from '../../utils/fitnessDb';
+import { mergeExercises } from '../../utils/quickLog';
+import { alternativesFor } from '../../utils/swaps';
 
 interface Props {
   /** Saved sessions, newest first. */
@@ -23,6 +25,9 @@ interface Props {
   /** A saved session the user asked to edit (from History). Handled once, then cleared. */
   editRequest?: { session: Session; key: number } | null;
   onEditHandled?: () => void;
+  /** Exercises from the quick log to add to the session (it starts one for the active day if none is open). */
+  appendRequest?: { exercises: ExerciseLog[]; key: number } | null;
+  onAppendHandled?: () => void;
 }
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -49,11 +54,13 @@ function useDraft() {
 }
 
 /** Start a Push, Pull or Legs session, then log each set as one row. Sets start prefilled from last time. */
-export default function SessionLogger({ sessions, cues, settings, activeDay, activeLabel, openCount, onDayChosen, onSaved, startRest, editRequest, onEditHandled }: Props) {
+export default function SessionLogger({ sessions, cues, settings, activeDay, activeLabel, openCount, onDayChosen, onSaved, startRest, editRequest, onEditHandled, appendRequest, onAppendHandled }: Props) {
   const { draft, setDraft, loaded } = useDraft();
   const [newName, setNewName] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [swapping, setSwapping] = useState<string | null>(null);
+  const [swapText, setSwapText] = useState('');
   const [cueEditing, setCueEditing] = useState<string | null>(null);
   const [cueText, setCueText] = useState('');
   const unit = settings.unit;
@@ -90,6 +97,29 @@ export default function SessionLogger({ sessions, cues, settings, activeDay, act
     }
     if (draft.day !== activeDay && isPristineDraft(draft, sessions)) setDraft(newSession(activeDay, undefined, sessions));
   }, [loaded, openCount, activeDay, draft, editing, sessions, setDraft]);
+
+  // Quick-log exercises go into the open session, or start one for the day in use.
+  const lastAppend = useRef<number | null>(null);
+  useEffect(() => {
+    if (!appendRequest || !loaded || lastAppend.current === appendRequest.key) return;
+    lastAppend.current = appendRequest.key;
+    setError('');
+    setDraft(mergeExercises(draft ?? newSession(activeDay, undefined, sessions), appendRequest.exercises));
+    onAppendHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appendRequest, loaded]);
+
+  /** Swap an exercise for another: its sets start from what you last did on the new lift. */
+  const swapTo = (id: string, name: string) => {
+    const prev = previousSets(sessions, name);
+    patchExercise(id, (x) => ({
+      ...x,
+      name: name.slice(0, 80),
+      sets: prev ? prev.map((p) => ({ weight: p.weight, reps: p.reps, done: false, type: p.type })) : x.sets.map((s) => ({ ...s, weight: '', done: false })),
+    }));
+    setSwapping(null);
+    setSwapText('');
+  };
 
   /** Switch the session in progress to another day, asking first when that would throw away entries. */
   const switchDay = (day: DayType) => {
@@ -256,6 +286,19 @@ export default function SessionLogger({ sessions, cues, settings, activeDay, act
               </button>
               <button
                 type="button"
+                aria-label={`Swap ${ex.name} for another exercise`}
+                aria-expanded={swapping === ex.id}
+                data-testid="swap-exercise"
+                className="flex h-10 w-10 shrink-0 items-center justify-center f-muted hover:text-white"
+                onClick={() => {
+                  setSwapping(swapping === ex.id ? null : ex.id);
+                  setSwapText('');
+                }}
+              >
+                <Repeat className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
                 aria-label={`Remove ${ex.name}`}
                 className="flex h-10 w-10 shrink-0 items-center justify-center f-muted hover:text-white"
                 onClick={() => {
@@ -267,6 +310,32 @@ export default function SessionLogger({ sessions, cues, settings, activeDay, act
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
+
+            {swapping === ex.id && (
+              <div className="mb-2 space-y-2" data-testid="swap-panel">
+                {alternativesFor(ex.name).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Suggested swaps">
+                    {alternativesFor(ex.name).map((a) => (
+                      <button key={a} type="button" className="f-chip" data-testid="swap-option" onClick={() => swapTo(ex.id, a)}>
+                        {a}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <form
+                  className="flex gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (swapText.trim()) swapTo(ex.id, swapText.trim());
+                  }}
+                >
+                  <input className="f-input" value={swapText} maxLength={80} onChange={(e) => setSwapText(e.target.value)} placeholder="Or type another exercise" aria-label={`Replace ${ex.name} with`} data-testid="swap-input" />
+                  <button type="submit" className="f-btn" style={{ minHeight: 40 }} data-testid="swap-apply">
+                    Swap
+                  </button>
+                </form>
+              </div>
+            )}
 
             {cueEditing === ex.id && (
               <form

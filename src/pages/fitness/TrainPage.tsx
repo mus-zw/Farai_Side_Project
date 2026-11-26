@@ -5,7 +5,7 @@ import { useFitness } from '../../components/fitness/FitnessProvider';
 import PlanCard from '../../components/fitness/PlanCard';
 import SessionLogger from '../../components/fitness/SessionLogger';
 import HistoryList from '../../components/fitness/HistoryList';
-import type { Session } from '../../utils/fitness';
+import type { ExerciseLog, Session } from '../../utils/fitness';
 
 const NONE: Session[] = [];
 const NO_CUES: Record<string, string> = {};
@@ -16,7 +16,7 @@ interface Pick {
   weekday?: string;
 }
 
-export default function TrainPage() {
+export default function TrainPage({ appendRequest, onAppendHandled }: { appendRequest?: { exercises: ExerciseLog[]; key: number } | null; onAppendHandled?: () => void } = {}) {
   const { settings, updateSettings, notify, startRest } = useFitness();
   // Newest first.
   const sessions = useLive(sessionsNewestFirst, [], NONE);
@@ -61,6 +61,8 @@ export default function TrainPage() {
         startRest={startRest}
         editRequest={editRequest}
         onEditHandled={() => setEditRequest(null)}
+        appendRequest={appendRequest}
+        onAppendHandled={onAppendHandled}
       />
       <HistoryList sessions={sessions} unit={settings.unit} onEdit={(session) => setEditRequest({ session, key: Date.now() })} />
     </div>

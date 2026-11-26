@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
-import { Home, Dumbbell, Utensils, LineChart, ScanLine, UserRound } from 'lucide-react';
+import { Home, CalendarCheck, Dumbbell, LineChart, UserRound } from 'lucide-react';
 import { FitnessProvider, useFitness } from './FitnessProvider';
 import { FitnessAuthProvider, useFitnessAuth } from './FitnessAuthProvider';
 import RestTimerBar from './RestTimerBar';
@@ -11,18 +11,14 @@ import { fitnessStatus } from '../../utils/entitlements';
 import { useEntitlements } from '../../utils/useEntitlements';
 
 const TABS = [
-  { to: '/fitness', label: 'Train', Icon: Dumbbell, end: true },
-  { to: '/fitness/nutrition', label: 'Nutrition', Icon: Utensils, end: false },
+  { to: '/fitness', label: 'Today', Icon: CalendarCheck, end: true },
   { to: '/fitness/progress', label: 'Progress', Icon: LineChart, end: false },
-  { to: '/fitness/coach', label: 'Coach', Icon: ScanLine, end: false },
   { to: '/fitness/profile', label: 'Profile', Icon: UserRound, end: false },
 ] as const;
 
 const TITLES: Record<string, string> = {
-  '/fitness': 'Train',
-  '/fitness/nutrition': 'Nutrition',
+  '/fitness': 'Today',
   '/fitness/progress': 'Progress',
-  '/fitness/coach': 'Form Coach',
   '/fitness/profile': 'Profile',
 };
 

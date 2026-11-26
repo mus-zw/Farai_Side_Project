@@ -13,10 +13,8 @@ import FitnessGate from './components/fitness/FitnessGate';
 // The fitness app is loaded on demand, and only once the gate lets a visitor through, so someone
 // holding an old link gets the Launching Soon page without downloading the app.
 const FitnessLayout = lazy(() => import('./components/fitness/FitnessLayout'));
-const TrainPage = lazy(() => import('./pages/fitness/TrainPage'));
-const NutritionPage = lazy(() => import('./pages/fitness/NutritionPage'));
+const TodayPage = lazy(() => import('./pages/fitness/TodayPage'));
 const ProgressPage = lazy(() => import('./pages/fitness/ProgressPage'));
-const CoachPage = lazy(() => import('./pages/fitness/CoachPage'));
 const ProfilePage = lazy(() => import('./pages/fitness/ProfilePage'));
 const AppLoading = () => <div className="min-h-screen" style={{ background: '#0a0c0f' }} aria-busy="true" />;
 import { ProfileProvider } from './components/ProfileProvider';
@@ -85,10 +83,11 @@ export default function App() {
                 </FitnessGate>
               }
             >
-              <Route index element={<TrainPage />} />
-              <Route path="nutrition" element={<NutritionPage />} />
+              <Route index element={<TodayPage />} />
               <Route path="progress" element={<ProgressPage />} />
-              <Route path="coach" element={<CoachPage />} />
+              {/* Train and Nutrition became "Today", and the Form Coach moved into Progress. */}
+              <Route path="nutrition" element={<Navigate to="/fitness" replace />} />
+              <Route path="coach" element={<Navigate to="/fitness/progress#coach" replace />} />
               <Route path="profile" element={<ProfilePage />} />
               {/* The old name for the profile screen. */}
               <Route path="more" element={<Navigate to="/fitness/profile" replace />} />

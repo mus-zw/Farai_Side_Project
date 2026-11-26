@@ -15,7 +15,7 @@ const COLOR: Record<InsightLevel, string> = { good: 'var(--f-good)', attention: 
 
 /** Plain-language notes from your own Train, Nutrition and weight logs. Rules, not a model: nothing leaves this device. */
 export default function CoachInsights() {
-  const { settings } = useFitness();
+  const { settings, updateSettings, notify } = useFitness();
   const sessions = useLive(sessionsNewestFirst, [], NO_SESSIONS);
   const meals = useLive(() => db.meals.toArray(), [], NO_MEALS);
   const weights = useLive(() => db.weights.orderBy('date').toArray(), [], NO_WEIGHTS);
@@ -29,8 +29,7 @@ export default function CoachInsights() {
       </div>
       {insights.length === 0 ? (
         <p className="f-small" data-testid="insights-empty">
-          Nothing to say yet. Log a session on <Link to="/fitness" className="f-accent underline">Train</Link>, meals on <Link to="/fitness/nutrition" className="f-accent underline">Nutrition</Link> and a weigh-in on{' '}
-          <Link to="/fitness/progress" className="f-accent underline">Progress</Link>, and notes appear here.
+          Nothing to say yet. Log a session and meals on <Link to="/fitness" className="f-accent underline">Today</Link> and a weigh-in below, and notes appear here.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -45,6 +44,20 @@ export default function CoachInsights() {
                     {i.title}
                   </div>
                   <p className="f-small">{i.detail}</p>
+                  {i.action && (
+                    <button
+                      type="button"
+                      className="f-btn mt-2"
+                      style={{ minHeight: 40 }}
+                      data-testid="insight-action"
+                      onClick={() => {
+                        updateSettings({ targets: { kcal: i.action!.kcal } });
+                        notify('success', `Calorie target set to ${i.action!.kcal} kcal.`);
+                      }}
+                    >
+                      {i.action.label}
+                    </button>
+                  )}
                 </div>
               </li>
             );

@@ -4,6 +4,7 @@
  * These are general training observations, not medical or dietary advice.
  */
 import { DAY_LABEL, DAY_TYPES, DayType, Meal, Session, Settings, WeightEntry, daysBetween, plannedDaysPerWeek, shiftDate } from './fitness';
+import { alternativesFor } from './swaps';
 import { adaptiveTarget, e1rmHistory, exerciseNames, mealFrequency, mealsByDate, trendSeries, weeklyRate } from './fitnessMath';
 
 export type InsightLevel = 'good' | 'attention' | 'info';
@@ -13,6 +14,8 @@ export interface Insight {
   level: InsightLevel;
   title: string;
   detail: string;
+  /** A change you can apply in one tap. */
+  action?: { kind: 'kcal'; label: string; kcal: number };
 }
 
 export interface InsightInput {
@@ -66,7 +69,15 @@ function overload({ sessions }: InsightInput): Insight[] {
     else if (last <= first * 1.0 && Math.max(...last3.map((p) => p.value)) <= first * 1.01) stalled.push(n);
   }
   if (rising.length) out.push({ id: 'overload-up', level: 'good', title: `Getting stronger: ${rising.slice(0, 3).join(', ')}`, detail: 'Estimated 1RM is up across your last three sessions on these lifts. Keep the same approach.' });
-  if (stalled.length) out.push({ id: 'overload-flat', level: 'attention', title: `Plateau: ${stalled.slice(0, 3).join(', ')}`, detail: 'No gain in estimated 1RM over your last three sessions. Try one more rep per set, a small weight jump, or a lighter week before pushing again.' });
+  if (stalled.length) {
+    const alt = alternativesFor(stalled[0])[0];
+    out.push({
+      id: 'overload-flat',
+      level: 'attention',
+      title: `Plateau: ${stalled.slice(0, 3).join(', ')}`,
+      detail: `No gain in estimated 1RM over your last three sessions. Try one more rep per set, a small weight jump, or a lighter week before pushing again.${alt ? ` Or swap ${stalled[0]} for ${alt} (the swap button on the exercise in Today).` : ''}`,
+    });
+  }
   return out;
 }
 
@@ -114,7 +125,7 @@ function bodyWeight({ weights, meals, settings, today }: InsightInput): Insight[
     else out.push({ id: 'goal-weight', level: 'info', title: `${Math.abs(gap).toFixed(1)} ${unit} ${gap > 0 ? 'above' : 'below'} your goal weight`, detail: `Trend ${now.toFixed(1)} ${unit} vs goal ${settings.goalWeight} ${unit}.` });
   }
   const adaptive = adaptiveTarget(weights, mealsByDate(meals), settings.goal, unit, today);
-  if (adaptive.ok && Math.abs(adaptive.target - settings.targets.kcal) >= 150) out.push({ id: 'adaptive', level: 'info', title: `Your data suggests about ${adaptive.target} kcal a day`, detail: `Your target is ${settings.targets.kcal}. The Nutrition page has a one-tap button to use the suggestion.` });
+  if (adaptive.ok && Math.abs(adaptive.target - settings.targets.kcal) >= 150) out.push({ id: 'adaptive', level: 'info', title: `Your data suggests about ${adaptive.target} kcal a day`, detail: `Your target is ${settings.targets.kcal}. Apply it with one tap, or keep yours.`, action: { kind: 'kcal', label: `Use ${adaptive.target} kcal`, kcal: adaptive.target } });
   return out;
 }
 
