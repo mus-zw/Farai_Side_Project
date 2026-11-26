@@ -615,7 +615,13 @@ export default function Demo({ onNotify }: DemoProps) {
 
       {/* VIDEO SUITE VIEW */}
       {mediaMode === 'video' ? (
-        <VideoProcessor onNotify={onNotify} />
+        <VideoProcessor
+          onNotify={onNotify}
+          engine={engine}
+          onEngineChange={chooseEngine}
+          confidenceThreshold={confidenceThreshold}
+          onConfidenceChange={setConfidenceThreshold}
+        />
       ) : (
         /* IMAGE SUITE VIEW */
         <div className="space-y-8 animate-in fade-in">
@@ -708,7 +714,7 @@ export default function Demo({ onNotify }: DemoProps) {
               </div>
               <p className="text-[11px] text-neutral-500">
                 {engine === 'browser'
-                  ? 'Single images only. Batch, comparison and video always use the backend.'
+                  ? 'Images and video files. Batch and comparison always use the backend.'
                   : 'Needs the backend server. No server? Run it in your browser instead.'}
               </p>
             </div>

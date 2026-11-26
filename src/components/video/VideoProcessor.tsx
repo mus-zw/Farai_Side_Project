@@ -20,6 +20,8 @@ import { processVideo } from '../../services/videoApi';
 import { frameIndexAtTime } from '../../utils/videoFrames';
 import { activeCountsByClass, overlayAtTime } from '../../utils/videoOverlay';
 import VideoUpload from './VideoUpload';
+import BrowserVideoDetector from './BrowserVideoDetector';
+import type { InferenceEngine } from '../../services/visionApi';
 import VideoPlayer from './VideoPlayer';
 import VideoTimeline from './VideoTimeline';
 import FrameAnalysis from './FrameAnalysis';
@@ -27,11 +29,50 @@ import VideoAnalytics from './VideoAnalytics';
 
 interface VideoProcessorProps {
   onNotify: (type: 'success' | 'error' | 'info', message: string) => void;
+  /** Where detection runs. 'browser' plays the file locally and never uses the backend. */
+  engine?: InferenceEngine;
+  onEngineChange?: (engine: InferenceEngine) => void;
+  confidenceThreshold?: number;
+  onConfidenceChange?: (value: number) => void;
+}
+
+function VideoEngineSwitch({ engine, onChange }: { engine: InferenceEngine; onChange: (e: InferenceEngine) => void }) {
+  return (
+    <div
+      role="group"
+      aria-label="Video inference engine"
+      className="inline-flex rounded-xl border border-neutral-800 bg-neutral-900/60 p-1 text-xs"
+    >
+      {([
+        ['backend', 'Backend server'],
+        ['browser', 'In this browser'],
+      ] as const).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          data-testid={`video-engine-${value}`}
+          aria-pressed={engine === value}
+          onClick={() => onChange(value)}
+          className={`min-h-[36px] rounded-lg px-3.5 py-1.5 font-semibold transition-colors ${
+            engine === value ? 'bg-[#32FF00] text-neutral-950' : 'text-neutral-400 hover:text-white'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 type VideoSubTab = 'player' | 'frames' | 'analytics';
 
-export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
+export default function VideoProcessor({
+  onNotify,
+  engine = 'backend',
+  onEngineChange,
+  confidenceThreshold = 0.25,
+  onConfidenceChange,
+}: VideoProcessorProps) {
   const [videoFile, setVideoFile] = useState<File | Blob | null>(null);
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -115,8 +156,22 @@ export default function VideoProcessor({ onNotify }: VideoProcessorProps) {
     onNotify('success', 'Video detection JSON metrics downloaded!');
   };
 
+  if (engine === 'browser') {
+    return (
+      <div className="space-y-5">
+        {onEngineChange && <VideoEngineSwitch engine={engine} onChange={onEngineChange} />}
+        <BrowserVideoDetector
+          confidenceThreshold={confidenceThreshold}
+          onConfidenceChange={onConfidenceChange ?? (() => undefined)}
+          onNotify={onNotify}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in">
+      {onEngineChange && <VideoEngineSwitch engine={engine} onChange={onEngineChange} />}
       {/* 1. Upload & Options Section */}
       <VideoUpload
         onVideoSelected={handleVideoSelected}

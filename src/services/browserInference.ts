@@ -219,11 +219,18 @@ async function decodeForInference(file: Blob, meta: ImageMetadata | undefined, o
   return resized;
 }
 
-function letterboxToTensorData(bitmap: ImageBitmap, lb: ReturnType<typeof computeLetterbox>): Float32Array {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = INPUT_SIZE;
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('This browser could not create a 2D canvas.');
+// One 640x640 scratch canvas, reused so per-frame video inference allocates no canvases.
+let scratch: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null = null;
+
+function letterboxToTensorData(bitmap: CanvasImageSource, lb: ReturnType<typeof computeLetterbox>): Float32Array {
+  if (!scratch) {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = INPUT_SIZE;
+    const c = canvas.getContext('2d', { willReadFrequently: true });
+    if (!c) throw new Error('This browser could not create a 2D canvas.');
+    scratch = { canvas, ctx: c };
+  }
+  const ctx = scratch.ctx;
   ctx.fillStyle = `rgb(${PAD_VALUE},${PAD_VALUE},${PAD_VALUE})`;
   ctx.fillRect(0, 0, INPUT_SIZE, INPUT_SIZE);
   ctx.imageSmoothingEnabled = true;
@@ -359,5 +366,35 @@ export function detectInBrowser(
     } finally {
       bitmap.close();
     }
+  });
+}
+
+export interface FrameDetectionResult {
+  detections: Detection[];
+  backend: BrowserBackend;
+  /** Preprocess + inference + decode, in ms. */
+  ms: number;
+}
+
+/**
+ * Detect objects in one video frame (or any canvas-drawable source) using the
+ * already-loaded session. Returns boxes in source pixels (width x height).
+ * Callers should drop frames while one is in flight (see BrowserVideoDetector's
+ * isInferring guard); nothing here is sent over the network.
+ */
+export function detectFrameInBrowser(
+  source: CanvasImageSource,
+  width: number,
+  height: number,
+  confidence: number
+): Promise<FrameDetectionResult> {
+  return enqueue(async () => {
+    const model = await loadBrowserModel();
+    const t0 = performance.now();
+    const lb = computeLetterbox(width, height);
+    const input = letterboxToTensorData(source, lb);
+    const run = await runModel(model, input);
+    const detections = decodeOutput(run.output, lb, { confidence });
+    return { detections, backend: run.model.backend, ms: performance.now() - t0 };
   });
 }
