@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Dumbbell, ScanLine, UserCircle2 } from 'lucide-react';
 import { useProfile } from './ProfileProvider';
 import { INTERESTS, InterestId, orderByInterests } from '../utils/interests';
+import LaunchBadge from './LaunchBadge';
 
 const ICONS: Record<InterestId, typeof ScanLine> = { cv: ScanLine, fitness: Dumbbell };
 
@@ -42,6 +43,7 @@ export default function InterestShortcuts() {
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2 text-sm font-bold text-white">
                   {item.label}
+                  {item.id === 'fitness' && <LaunchBadge />}
                   {picked && <span className="rounded-full bg-[#32FF00]/15 px-2 py-0.5 text-[10px] font-semibold text-[#32FF00]">Your interest</span>}
                 </span>
                 <span className="mt-1 block text-xs text-neutral-400">{item.blurb}</span>

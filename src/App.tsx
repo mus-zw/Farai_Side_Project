@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
@@ -7,12 +7,16 @@ import Home from './pages/Home';
 import Demo from './pages/Demo';
 import About from './pages/About';
 import Contact from './pages/Contact';
-import FitnessLayout from './components/fitness/FitnessLayout';
-import TrainPage from './pages/fitness/TrainPage';
-import NutritionPage from './pages/fitness/NutritionPage';
-import ProgressPage from './pages/fitness/ProgressPage';
-import CoachPage from './pages/fitness/CoachPage';
-import ProfilePage from './pages/fitness/ProfilePage';
+import FitnessGate from './components/fitness/FitnessGate';
+// The fitness app is loaded on demand, and only once the gate lets a visitor through, so someone
+// holding an old link gets the Launching Soon page without downloading the app.
+const FitnessLayout = lazy(() => import('./components/fitness/FitnessLayout'));
+const TrainPage = lazy(() => import('./pages/fitness/TrainPage'));
+const NutritionPage = lazy(() => import('./pages/fitness/NutritionPage'));
+const ProgressPage = lazy(() => import('./pages/fitness/ProgressPage'));
+const CoachPage = lazy(() => import('./pages/fitness/CoachPage'));
+const ProfilePage = lazy(() => import('./pages/fitness/ProfilePage'));
+const AppLoading = () => <div className="min-h-screen" style={{ background: '#0a0c0f' }} aria-busy="true" />;
 import { ProfileProvider } from './components/ProfileProvider';
 import { ConsentProvider } from './components/ConsentProvider';
 import { EntitlementProvider } from './components/pro/EntitlementProvider';
@@ -69,7 +73,16 @@ export default function App() {
         <Routes>
           {/* The fitness area is its own app: no portfolio navbar or footer. */}
           {APP_MODE !== 'lab' && (
-            <Route path="/fitness" element={<FitnessLayout onNotify={addNotification} />}>
+            <Route
+              path="/fitness"
+              element={
+                <FitnessGate>
+                  <Suspense fallback={<AppLoading />}>
+                    <FitnessLayout onNotify={addNotification} />
+                  </Suspense>
+                </FitnessGate>
+              }
+            >
               <Route index element={<TrainPage />} />
               <Route path="nutrition" element={<NutritionPage />} />
               <Route path="progress" element={<ProgressPage />} />

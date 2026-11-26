@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
 import { Menu, X, Sparkles, Terminal, Dumbbell, UserCircle2 } from 'lucide-react';
 import { useProfile } from './ProfileProvider';
+import LaunchBadge from './LaunchBadge';
+import { useFitnessGate } from '../utils/fitnessGate';
 import { InterestId, orderByInterests } from '../utils/interests';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { profile, openProfile } = useProfile();
+  const gate = useFitnessGate();
 
   // Home first, then Demo and Fitness with the visitor's interests on top, then About and Contact.
   const interestLinks: { name: string; path: string; interest?: InterestId }[] = orderByInterests(
@@ -24,8 +27,9 @@ export default function Navbar() {
     { name: 'Contact', path: '/contact' },
   ];
   // The big button points at the first interest picked (the CV demo by default).
+  // A locked (not yet launched) fitness app is not promoted by the big button.
   const cta =
-    profile.interests[0] === 'fitness'
+    profile.interests[0] === 'fitness' && !gate.badge
       ? { to: '/fitness', label: 'Open Fitness', Icon: Dumbbell }
       : { to: '/demo', label: 'Launch CV Demo', Icon: Sparkles };
   const initial = profile.signedIn ? profile.name.charAt(0).toUpperCase() : '';
@@ -103,7 +107,10 @@ export default function Navbar() {
                   const active = isLinkActive(link.path, isActive);
                   return (
                     <>
-                      <span>{link.name}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        {link.name}
+                        {link.path === '/fitness' && <LaunchBadge />}
+                      </span>
                       {active && (
                         <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#32FF00] rounded-full shadow-[0_0_8px_#32FF00]" />
                       )}
@@ -177,7 +184,10 @@ export default function Navbar() {
                     const active = isLinkActive(link.path, isActive);
                     return (
                       <>
-                        <span>{link.name}</span>
+                        <span className="inline-flex items-center gap-1.5">
+                        {link.name}
+                        {link.path === '/fitness' && <LaunchBadge />}
+                      </span>
                         {active && <span className="h-2 w-2 rounded-full bg-[#32FF00]" />}
                       </>
                     );

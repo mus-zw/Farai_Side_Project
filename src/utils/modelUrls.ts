@@ -20,12 +20,11 @@ export function resolveBase(configured: unknown, fallback: string): string {
   return typeof configured === 'string' && configured.trim() ? trimEnd(configured) : trimEnd(fallback);
 }
 
-const env = import.meta.env;
-const SITE_BASE = env.BASE_URL.replace(/\/+$/, ''); // "" at the root, "/sub" under a sub-path
+const SITE_BASE = import.meta.env.BASE_URL.replace(/\/+$/, ''); // "" at the root, "/sub" under a sub-path
 
-export const MODEL_BASE_URL = resolveBase(env.VITE_MODEL_BASE_URL, `${SITE_BASE}/models`);
-export const ORT_WASM_BASE_URL = resolveBase(env.VITE_ORT_WASM_BASE_URL, `${SITE_BASE}/ort`) + '/';
-export const MEDIAPIPE_WASM_BASE_URL = resolveBase(env.VITE_MEDIAPIPE_WASM_BASE_URL, `${SITE_BASE}/mediapipe/wasm`);
+export const MODEL_BASE_URL = resolveBase(import.meta.env.VITE_MODEL_BASE_URL, `${SITE_BASE}/models`);
+export const ORT_WASM_BASE_URL = resolveBase(import.meta.env.VITE_ORT_WASM_BASE_URL, `${SITE_BASE}/ort`) + '/';
+export const MEDIAPIPE_WASM_BASE_URL = resolveBase(import.meta.env.VITE_MEDIAPIPE_WASM_BASE_URL, `${SITE_BASE}/mediapipe/wasm`);
 
 /** A file in the model folder, e.g. "yolo11n.onnx". */
 export const modelFileUrl = (file: string): string => `${MODEL_BASE_URL}/${file}`;

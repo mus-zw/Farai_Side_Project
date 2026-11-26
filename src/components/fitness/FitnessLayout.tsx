@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
 import { Home, Dumbbell, Utensils, LineChart, ScanLine, UserRound } from 'lucide-react';
 import { FitnessProvider, useFitness } from './FitnessProvider';
@@ -104,7 +105,11 @@ function Shell() {
           </div>
         )}
         {onboarding && <Onboarding />}
-        {ready && athlete && <Outlet />}
+        {ready && athlete && (
+          <Suspense fallback={<p className="f-small">Loading…</p>}>
+            <Outlet />
+          </Suspense>
+        )}
       </main>
 
       {ready && athlete && (

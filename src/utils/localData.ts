@@ -1,4 +1,3 @@
-import { db } from './fitnessDb';
 import { cloudConfigured } from '../lib/firebaseConfig';
 
 /**
@@ -25,6 +24,8 @@ export async function clearAllLocalData(): Promise<void> {
     // Storage blocked: nothing was stored.
   }
   try {
+    // Loaded on demand: visitors who never use the fitness app should not download its database code.
+    const { db } = await import('./fitnessDb');
     db.close();
     await db.delete();
   } catch {

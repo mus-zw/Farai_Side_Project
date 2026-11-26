@@ -20,11 +20,10 @@ export function resolveCheckoutUrl(template: string | undefined, plan: string): 
   }
 }
 
-const env = import.meta.env;
-export const CV_CHECKOUT_URL: string | undefined = env.VITE_CV_CHECKOUT_URL;
-export const FITNESS_CHECKOUT_ZAR_URL: string | undefined = env.VITE_FITNESS_CHECKOUT_ZAR_URL;
-export const FITNESS_CHECKOUT_USD_URL: string | undefined = env.VITE_FITNESS_CHECKOUT_USD_URL;
-export const LICENSE_PUBLIC_KEY: string | undefined = env.VITE_LICENSE_PUBLIC_KEY;
+export const CV_CHECKOUT_URL: string | undefined = import.meta.env.VITE_CV_CHECKOUT_URL;
+export const FITNESS_CHECKOUT_ZAR_URL: string | undefined = import.meta.env.VITE_FITNESS_CHECKOUT_ZAR_URL;
+export const FITNESS_CHECKOUT_USD_URL: string | undefined = import.meta.env.VITE_FITNESS_CHECKOUT_USD_URL;
+export const LICENSE_PUBLIC_KEY: string | undefined = import.meta.env.VITE_LICENSE_PUBLIC_KEY;
 
 /** The "demo unlock" switch is for development and testing, never on by default in production. */
-export const DEMO_UNLOCK_ENABLED: boolean = Boolean(env.DEV) || env.VITE_ENABLE_DEMO_UNLOCK === 'true';
+export const DEMO_UNLOCK_ENABLED: boolean = Boolean(import.meta.env.DEV) || import.meta.env.VITE_ENABLE_DEMO_UNLOCK === 'true';

@@ -31,7 +31,17 @@ export function readFirebaseConfig(env: Record<string, unknown>): FirebaseWebCon
   return { apiKey, authDomain, projectId, appId, ...(storageBucket && { storageBucket }), ...(messagingSenderId && { messagingSenderId }), ...(measurementId && { measurementId }) };
 }
 
-export const firebaseConfig: FirebaseWebConfig | null = readFirebaseConfig(import.meta.env as Record<string, unknown>);
+// Each variable is named explicitly (never the whole import.meta.env object) so a build only ever
+// inlines the variables it actually uses and nothing else, such as the fitness preview key, leaks in.
+export const firebaseConfig: FirebaseWebConfig | null = readFirebaseConfig({
+  VITE_FIREBASE_API_KEY: import.meta.env.VITE_FIREBASE_API_KEY,
+  VITE_FIREBASE_AUTH_DOMAIN: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  VITE_FIREBASE_PROJECT_ID: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  VITE_FIREBASE_APP_ID: import.meta.env.VITE_FIREBASE_APP_ID,
+  VITE_FIREBASE_STORAGE_BUCKET: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  VITE_FIREBASE_MESSAGING_SENDER_ID: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  VITE_FIREBASE_MEASUREMENT_ID: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+});
 
 /** True when the dev-only in-memory cloud is switched on (never in a production build). */
 export const mockCloudRequested: boolean = Boolean(import.meta.env.DEV) && import.meta.env.VITE_FIREBASE_MOCK === 'true';

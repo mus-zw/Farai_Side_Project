@@ -1,5 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'path';
 import {defaultClientConditions, defineConfig, loadEnv, type Plugin} from 'vite';
@@ -114,10 +115,40 @@ function assetSizeGuard(): Plugin {
  */
 const isSet = (v: string | undefined) => typeof v === 'string' && v.trim() !== '';
 
+/**
+ * Fails the build if the fitness preview key itself appears anywhere in the output. Only its SHA-256
+ * is meant to ship. Catches someone later reading the whole import.meta.env object, which would
+ * inline every VITE_* variable (this repo had exactly that in four files).
+ */
+function previewKeyLeakGuard(rawKey: string): Plugin {
+  return {
+    name: 'preview-key-leak-guard',
+    apply: 'build',
+    writeBundle(options) {
+      if (rawKey.length < 4) return;
+      const out = path.resolve(__dirname, options.dir ?? 'dist');
+      const hits: string[] = [];
+      const walk = (dir: string) => {
+        for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+          const p = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(p);
+          else if (/\.(js|mjs|html|css|json|map|txt)$/.test(entry.name) && fs.readFileSync(p, 'utf8').includes(rawKey)) hits.push(path.relative(out, p));
+        }
+      };
+      if (fs.existsSync(out)) walk(out);
+      if (hits.length) throw new Error(`VITE_FITNESS_PREVIEW_KEY appears in the build output (${hits.join(', ')}). Only its hash may be shipped: do not read the whole import.meta.env object.`);
+    },
+  };
+}
+
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
+  // The preview key never ships: only this hash does (see src/utils/fitnessGate.ts).
+  const previewKey = (env.VITE_FITNESS_PREVIEW_KEY ?? '').trim();
+  const previewHash = previewKey ? crypto.createHash('sha256').update(previewKey).digest('hex') : '';
   return {
-    plugins: [react(), tailwindcss(), ortWasmAssets(isSet(env.VITE_ORT_WASM_BASE_URL)), mediapipeWasmAssets(isSet(env.VITE_MEDIAPIPE_WASM_BASE_URL)), assetSizeGuard()],
+    plugins: [react(), tailwindcss(), ortWasmAssets(isSet(env.VITE_ORT_WASM_BASE_URL)), mediapipeWasmAssets(isSet(env.VITE_MEDIAPIPE_WASM_BASE_URL)), assetSizeGuard(), previewKeyLeakGuard(previewKey)],
+    define: {__FITNESS_PREVIEW_SHA256__: JSON.stringify(previewHash)},
     resolve: {
       // Use onnxruntime-web's "extern wasm" build: it loads its wasm from the
       // /ort/ path set in browserInference.ts (see ortWasmAssets above) instead

@@ -8,15 +8,15 @@ import axios from 'axios';
  * panel redirects image, video and comparison calls together.
  */
 
-const env = (import.meta as any).env ?? {};
-
 // In development the Vite dev server (port 3000) and the backend (8000) are
 // separate, so default to the backend's port. A production build is normally
 // served *by* the backend (FRONTEND_DIST), so default to the page's own
 // origin; that keeps working behind a tunnel or on a non-default port.
+// Each variable is read by name (never as the whole import.meta.env object), so the build inlines
+// only these two and nothing else, such as the fitness preview key, leaks into the bundle.
 const ENV_BACKEND_URL: string =
-  env.VITE_API_URL ||
-  (env.DEV || typeof window === 'undefined' ? 'http://localhost:8000' : window.location.origin);
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV || typeof window === 'undefined' ? 'http://localhost:8000' : window.location.origin);
 
 const BASE_URL_STORAGE_KEY = 'farai_cv_backend_base_url';
 // Older builds stored the full /api/detect endpoint under this key.
