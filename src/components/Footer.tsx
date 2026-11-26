@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import LaunchBadge from './LaunchBadge';
 import { Github, Linkedin, Mail, GraduationCap, MapPin } from 'lucide-react';
 
 export default function Footer() {
@@ -52,8 +53,9 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/demo" className="text-[#CCCCCC] hover:text-[#32FF00] transition-colors inline-block py-1">
+                <Link to="/demo" className="text-[#CCCCCC] hover:text-[#32FF00] transition-colors inline-flex items-center gap-2 py-1" data-testid="footer-demo">
                   Interactive CV Suite
+                  <LaunchBadge product="demo" />
                 </Link>
               </li>
               <li>

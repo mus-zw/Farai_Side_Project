@@ -23,6 +23,7 @@ import InterestShortcuts from '../components/InterestShortcuts';
 import EngineeringSection from '../components/hub/EngineeringSection';
 import CaseStudies from '../components/hub/CaseStudies';
 import WorkWithMe from '../components/hub/WorkWithMe';
+import LaunchBadge from '../components/LaunchBadge';
 
 export default function Home() {
   const sample = DEFAULT_SAMPLE; // a scene COCO models handle well; real output comes only from /demo
@@ -63,6 +64,7 @@ export default function Home() {
                 className="btn-lime min-h-[44px] inline-flex items-center gap-2.5 rounded-xl px-6 py-3 text-sm font-bold shadow-[0_0_20px_rgba(50,255,0,0.3)]"
               >
                 <span>Try the Demo Now</span>
+                <LaunchBadge product="demo" />
                 <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
@@ -309,6 +311,7 @@ export default function Home() {
           >
             <Eye className="h-4 w-4" />
             <span>Open CV Workbench</span>
+            <LaunchBadge product="demo" />
           </Link>
         </div>
       </section>

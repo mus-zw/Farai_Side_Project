@@ -110,6 +110,7 @@ export default function Navbar() {
                       <span className="inline-flex items-center gap-1.5">
                         {link.name}
                         {link.path === '/fitness' && <LaunchBadge />}
+                        {link.path === '/demo' && <LaunchBadge product="demo" />}
                       </span>
                       {active && (
                         <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#32FF00] rounded-full shadow-[0_0_8px_#32FF00]" />
@@ -131,6 +132,7 @@ export default function Navbar() {
             >
               <cta.Icon className="h-3.5 w-3.5 fill-current" />
               <span>{cta.label}</span>
+              {cta.to === '/demo' && <LaunchBadge product="demo" />}
             </NavLink>
           </div>
 
@@ -187,6 +189,7 @@ export default function Navbar() {
                         <span className="inline-flex items-center gap-1.5">
                         {link.name}
                         {link.path === '/fitness' && <LaunchBadge />}
+                        {link.path === '/demo' && <LaunchBadge product="demo" />}
                       </span>
                         {active && <span className="h-2 w-2 rounded-full bg-[#32FF00]" />}
                       </>
@@ -202,6 +205,7 @@ export default function Navbar() {
                 >
                   <cta.Icon className="h-4 w-4 fill-current" />
                   <span>{cta.label}</span>
+              {cta.to === '/demo' && <LaunchBadge product="demo" />}
                 </NavLink>
               </div>
             </nav>

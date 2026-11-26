@@ -4,7 +4,9 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Toast, { ToastMessage } from './components/Toast';
 import Home from './pages/Home';
-import Demo from './pages/Demo';
+import DemoGate from './components/DemoGate';
+// The demo is loaded on demand, only once the gate lets a visitor through.
+const Demo = lazy(() => import('./pages/Demo'));
 import About from './pages/About';
 import Contact from './pages/Contact';
 import FitnessGate from './components/fitness/FitnessGate';
@@ -107,7 +109,16 @@ export default function App() {
             >
               <Route path="/" element={<Home />} />
               <Route path="/home" element={<Home />} />
-              <Route path="/demo" element={<Demo onNotify={addNotification} />} />
+              <Route
+                path="/demo"
+                element={
+                  <DemoGate>
+                    <Suspense fallback={<AppLoading />}>
+                      <Demo onNotify={addNotification} />
+                    </Suspense>
+                  </DemoGate>
+                }
+              />
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact onNotify={addNotification} />} />
               <Route path="/privacy" element={<Privacy />} />
@@ -120,7 +131,16 @@ export default function App() {
           {APP_MODE === 'lab' && (
             <Route element={<SpokeLayout title="CV Auto-Labeler" />}>
               <Route path="/" element={<Navigate to="/demo" replace />} />
-              <Route path="/demo" element={<Demo onNotify={addNotification} />} />
+              <Route
+                path="/demo"
+                element={
+                  <DemoGate>
+                    <Suspense fallback={<AppLoading />}>
+                      <Demo onNotify={addNotification} />
+                    </Suspense>
+                  </DemoGate>
+                }
+              />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="*" element={<Navigate to="/demo" replace />} />
             </Route>

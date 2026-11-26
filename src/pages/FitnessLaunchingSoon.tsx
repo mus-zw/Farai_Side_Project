@@ -3,6 +3,7 @@ import { Dumbbell, Utensils, ScanLine, ArrowLeft, Mail, Lock } from 'lucide-reac
 import SiteLink from '../components/SiteLink';
 import EngineeredBy from '../components/EngineeredBy';
 import { PREVIEW_CONFIGURED, tryUnlock } from '../utils/fitnessGate';
+import { useDemoGate } from '../utils/demoGate';
 import { CONTACT_EMAIL, isStandalone, linkTo } from '../utils/site';
 
 const FEATURES = [
@@ -20,6 +21,7 @@ export default function FitnessLaunchingSoon() {
   const [phrase, setPhrase] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const demoLocked = useDemoGate().badge; // no point offering a demo that is also Launching Soon
   const hub = linkTo('hub');
   const lab = linkTo('lab');
   const showHub = !isStandalone || hub.external;
@@ -94,7 +96,7 @@ export default function FitnessLaunchingSoon() {
               <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Fitness app: launch updates')}&body=${encodeURIComponent('Please let me know when the Fitness app launches.')}`} className="f-btn-primary" style={{ minHeight: 46, padding: '0 20px' }} data-testid="soon-notify">
                 <Mail className="h-4 w-4" /> Get launch updates
               </a>
-              {(!isStandalone || lab.external) && (
+              {(!isStandalone || lab.external) && !demoLocked && (
                 <SiteLink to={lab} className="f-btn" style={{ minHeight: 46 }} data-testid="soon-lab">
                   Try the CV Auto-Labeler meanwhile
                 </SiteLink>
