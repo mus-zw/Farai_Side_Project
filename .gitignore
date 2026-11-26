@@ -17,3 +17,6 @@ logs/
 # License signing keys must never be committed
 license-private*.json
 *.jwk.json
+
+# MediaPipe pose models (large binaries, downloaded per public/models/README.md)
+*.task
