@@ -1,42 +1,72 @@
-import { NavLink, Link, Outlet } from 'react-router-dom';
-import { Home, Dumbbell, Utensils, LineChart, ScanLine, Settings2, ScanSearch } from 'lucide-react';
+import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
+import { Home, Dumbbell, Utensils, LineChart, ScanLine, UserRound } from 'lucide-react';
 import { FitnessProvider, useFitness } from './FitnessProvider';
 import RestTimerBar from './RestTimerBar';
+import Onboarding from './Onboarding';
 
 const TABS = [
   { to: '/fitness', label: 'Train', Icon: Dumbbell, end: true },
   { to: '/fitness/nutrition', label: 'Nutrition', Icon: Utensils, end: false },
   { to: '/fitness/progress', label: 'Progress', Icon: LineChart, end: false },
   { to: '/fitness/coach', label: 'Coach', Icon: ScanLine, end: false },
-  { to: '/fitness/more', label: 'More', Icon: Settings2, end: false },
+  { to: '/fitness/profile', label: 'Profile', Icon: UserRound, end: false },
 ] as const;
 
+const TITLES: Record<string, string> = {
+  '/fitness': 'Train',
+  '/fitness/nutrition': 'Nutrition',
+  '/fitness/progress': 'Progress',
+  '/fitness/coach': 'Form Coach',
+  '/fitness/profile': 'Profile',
+};
+
+/** One-click Portfolio, the current view, and the active athlete. */
+function AppBar() {
+  const { athlete } = useFitness();
+  const { pathname } = useLocation();
+  const title = TITLES[pathname.replace(/\/+$/, '') || '/fitness'] ?? 'Fitness';
+
+  return (
+    <header className="f-top">
+      <Link to="/" className="f-btn" style={{ minHeight: 36, padding: '0 12px', fontSize: 12 }} data-testid="back-to-portfolio" aria-label="Back to the portfolio home page">
+        <Home className="h-4 w-4" /> Portfolio
+      </Link>
+      <h1 className="f-title" data-testid="view-title">
+        {title}
+      </h1>
+      {athlete ? (
+        <Link to="/fitness/profile" className="f-athlete" data-testid="athlete-chip" aria-label={`Athlete profile: ${athlete.name}${athlete.mode === 'guest' ? ' (guest)' : ''}`}>
+          <span className="f-avatar" aria-hidden="true">
+            {athlete.name.charAt(0).toUpperCase()}
+          </span>
+          {athlete.mode === 'guest' ? <span className="f-guesttag">Guest</span> : <span className="f-athlete-name">{athlete.name}</span>}
+        </Link>
+      ) : (
+        <span />
+      )}
+    </header>
+  );
+}
+
 function Shell() {
-  const { status, error, seeded } = useFitness();
+  const { status, error, seeded, athlete } = useFitness();
+  const ready = status === 'ready' && athlete !== undefined;
+  const onboarding = status === 'ready' && athlete === null;
+
   return (
     <div className="f-root">
-      <header className="f-top">
-        <Link to="/" className="f-btn" style={{ minHeight: 34, padding: '0 11px', fontSize: 12 }} data-testid="back-to-portfolio" aria-label="Back to the portfolio home page">
-          <Home className="h-4 w-4" /> Portfolio
-        </Link>
-        <span className="flex items-center gap-2 text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-          <Dumbbell className="h-4 w-4 f-accent" /> Fitness
-        </span>
-        <Link to="/demo" className="f-btn" style={{ minHeight: 34, padding: '0 11px', fontSize: 12 }} data-testid="to-demo" aria-label="Open the computer vision demo">
-          <ScanSearch className="h-4 w-4" /> CV Demo
-        </Link>
-      </header>
-      {seeded && (
+      {!onboarding && <AppBar />}
+      {seeded && !onboarding && (
         <div className="mx-auto flex max-w-[880px] items-center justify-between gap-3 px-4 pt-3 text-[11px]" data-testid="sample-banner">
           <span className="f-muted">Showing sample data.</span>
-          <Link to="/fitness/more" className="font-bold f-accent hover:underline" data-testid="sample-pill">
+          <Link to="/fitness/profile" className="font-bold f-accent hover:underline" data-testid="sample-pill">
             Start fresh or reset
           </Link>
         </div>
       )}
 
       <main className="f-main">
-        {status === 'loading' && <p className="f-small" data-testid="fitness-loading">Opening your training log…</p>}
+        {(status === 'loading' || (status === 'ready' && athlete === undefined)) && <p className="f-small" data-testid="fitness-loading">Opening your training log…</p>}
         {status === 'error' && (
           <div className="f-card" role="alert" data-testid="fitness-db-error">
             <h2 className="f-h">Storage is not available</h2>
@@ -47,24 +77,28 @@ function Shell() {
             <p className="f-small mt-2">Details: {error}</p>
           </div>
         )}
-        {status === 'ready' && <Outlet />}
+        {onboarding && <Onboarding />}
+        {ready && athlete && <Outlet />}
       </main>
 
-      <RestTimerBar />
-
-      <nav className="f-bottomnav" aria-label="Fitness navigation">
-        {TABS.map(({ to, label, Icon, end }) => (
-          <NavLink key={to} to={to} end={end} className="f-nav-item" data-testid={`tab-${label.toLowerCase()}`}>
-            <Icon className="h-5 w-5" />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
+      {ready && athlete && (
+        <>
+          <RestTimerBar />
+          <nav className="f-bottomnav" aria-label="Fitness navigation">
+            {TABS.map(({ to, label, Icon, end }) => (
+              <NavLink key={to} to={to} end={end} className="f-nav-item" data-testid={`tab-${label.toLowerCase()}`}>
+                <Icon className="h-5 w-5" />
+                {label}
+              </NavLink>
+            ))}
+          </nav>
+        </>
+      )}
     </div>
   );
 }
 
-/** The isolated fitness shell: its own theme, a bottom tab bar, and a link back to the portfolio. */
+/** The standalone fitness app shell: its own theme, app bar and dock, and a one-click way back to the portfolio. */
 export default function FitnessLayout({ onNotify }: { onNotify: (type: 'success' | 'error' | 'info', message: string) => void }) {
   return (
     <div data-theme="fitness">

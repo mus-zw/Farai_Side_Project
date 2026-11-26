@@ -8,7 +8,7 @@ interface Props {
   onDate: (iso: string) => void;
   meals: Meal[];
   targets: Targets;
-  onTargets: (t: Targets) => void;
+  onTargets: (t: Partial<Targets>) => void;
 }
 
 function Bar({ label, value, target, unit, testId }: { label: string; value: number; target: number; unit: string; testId?: string }) {
@@ -57,7 +57,7 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
 
   const setTarget = (key: keyof Targets, raw: string) => {
     const v = Math.round(num(raw));
-    onTargets({ ...targets, [key]: key === 'meals' ? Math.min(v, 12) : v });
+    onTargets({ [key]: key === 'meals' ? Math.min(v, 12) : v });
   };
 
   return (

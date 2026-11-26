@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { GOAL_LABEL, Goal, Meal, Settings, WeightEntry, dateLabel, num, toISODate } from '../../utils/fitness';
 import { adaptiveTarget, linePath, trendSeries, weeklyRate } from '../../utils/fitnessMath';
-import { db } from '../../utils/fitnessDb';
+import { db, type SettingsPatch } from '../../utils/fitnessDb';
 
 interface Props {
   weights: WeightEntry[];
   byDate: Record<string, Meal[]>;
   settings: Settings;
-  onSettings: (patch: Partial<Settings>) => void;
+  onSettings: (patch: SettingsPatch) => void;
 }
 
 const W = 320;
@@ -107,7 +107,7 @@ export default function TrendWeightCard({ weights, byDate, settings, onSettings 
             <p>
               Suggested target for “{GOAL_LABEL[settings.goal].toLowerCase()}”: <strong className="f-accent" data-testid="adaptive-target">{adaptive.target} kcal</strong>
               {adaptive.target !== settings.targets.kcal && (
-                <button type="button" className="f-btn ml-2" style={{ minHeight: 30, padding: '0 10px', fontSize: 11 }} data-testid="apply-target" onClick={() => onSettings({ targets: { ...settings.targets, kcal: adaptive.target } })}>
+                <button type="button" className="f-btn ml-2" style={{ minHeight: 30, padding: '0 10px', fontSize: 11 }} data-testid="apply-target" onClick={() => onSettings({ targets: { kcal: adaptive.target } })}>
                   Use it
                 </button>
               )}

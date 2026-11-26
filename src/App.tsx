@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Outlet, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Toast, { ToastMessage } from './components/Toast';
@@ -12,7 +12,7 @@ import TrainPage from './pages/fitness/TrainPage';
 import NutritionPage from './pages/fitness/NutritionPage';
 import ProgressPage from './pages/fitness/ProgressPage';
 import CoachPage from './pages/fitness/CoachPage';
-import MorePage from './pages/fitness/MorePage';
+import ProfilePage from './pages/fitness/ProfilePage';
 import { ProfileProvider } from './components/ProfileProvider';
 import ProfileModal from './components/ProfileModal';
 
@@ -66,7 +66,9 @@ export default function App() {
             <Route path="nutrition" element={<NutritionPage />} />
             <Route path="progress" element={<ProgressPage />} />
             <Route path="coach" element={<CoachPage />} />
-            <Route path="more" element={<MorePage />} />
+            <Route path="profile" element={<ProfilePage />} />
+            {/* The old name for the profile screen. */}
+            <Route path="more" element={<Navigate to="/fitness/profile" replace />} />
           </Route>
 
           <Route

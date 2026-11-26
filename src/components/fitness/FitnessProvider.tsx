@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_SETTINGS, Settings } from '../../utils/fitness';
-import { getSettings, initFitnessDb, isSeeded, saveSettings, useLive } from '../../utils/fitnessDb';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Athlete, DEFAULT_SETTINGS, Settings } from '../../utils/fitness';
+import type { SettingsPatch } from '../../utils/fitnessDb';
+import { getAthlete, getSettings, initFitnessDb, isSeeded, patchSettings, useLive } from '../../utils/fitnessDb';
 
 type Notify = (type: 'success' | 'error' | 'info', message: string) => void;
 
@@ -15,8 +16,10 @@ interface FitnessContextValue {
   status: 'loading' | 'ready' | 'error';
   error: string;
   settings: Settings;
-  updateSettings: (patch: Partial<Settings>) => void;
+  updateSettings: (patch: SettingsPatch) => void;
   seeded: boolean;
+  /** undefined while loading, null before onboarding is done. */
+  athlete: Athlete | null | undefined;
   notify: Notify;
   rest: RestState;
   startRest: (seconds: number) => void;
@@ -50,10 +53,10 @@ export function FitnessProvider({ children, notify }: { children: ReactNode; not
   const settings = useLive(() => (status === 'ready' ? getSettings() : DEFAULT_SETTINGS), [status], DEFAULT_SETTINGS);
   const seeded = useLive(() => (status === 'ready' ? isSeeded() : false), [status], false);
 
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
-  const updateSettings = useCallback((patch: Partial<Settings>) => {
-    void saveSettings({ ...settingsRef.current, ...patch });
+  const athlete = useLive<Athlete | null | undefined>(() => (status === 'ready' ? getAthlete() : undefined), [status], undefined);
+
+  const updateSettings = useCallback((patch: SettingsPatch) => {
+    void patchSettings(patch);
   }, []);
 
   const startRest = useCallback((seconds: number) => {
@@ -70,8 +73,8 @@ export function FitnessProvider({ children, notify }: { children: ReactNode; not
   const skipRest = useCallback(() => setRest({ endsAt: null, total: 0 }), []);
 
   const value = useMemo(
-    () => ({ status, error, settings, updateSettings, seeded, notify, rest, startRest, adjustRest, skipRest }),
-    [status, error, settings, updateSettings, seeded, notify, rest, startRest, adjustRest, skipRest]
+    () => ({ status, error, settings, updateSettings, seeded, athlete, notify, rest, startRest, adjustRest, skipRest }),
+    [status, error, settings, updateSettings, seeded, athlete, notify, rest, startRest, adjustRest, skipRest]
   );
   return <FitnessContext.Provider value={value}>{children}</FitnessContext.Provider>;
 }

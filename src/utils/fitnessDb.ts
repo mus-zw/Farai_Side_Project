@@ -18,17 +18,22 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_TARGETS,
   DayType,
+  Athlete,
   Goal,
   MAX_CUE_LENGTH,
   Meal,
   Session,
   SetEntry,
+  Schedule,
   Settings,
+  Unit,
   WeightEntry,
+  cleanAthleteName,
   cueKey,
   cleanSession,
   clampNum,
   countedSets,
+  deriveTargets,
   isObj,
   kcalFromMacros,
   newId,
@@ -116,6 +121,94 @@ export async function getSettings(): Promise<Settings> {
 
 export async function saveSettings(next: Settings): Promise<void> {
   await db.kv.put({ key: 'settings', value: cleanSettings(next) });
+}
+
+export type SettingsPatch = Partial<Omit<Settings, 'targets'>> & { targets?: Partial<Settings['targets']> };
+
+/**
+ * Change some settings. The read-merge-write runs in one transaction, so quick
+ * successive changes (tap a split, then a unit) never overwrite each other the
+ * way merging against a cached copy would.
+ */
+export async function patchSettings(patch: SettingsPatch): Promise<void> {
+  await db.transaction('rw', db.kv, async () => {
+    const current = cleanSettings((await db.kv.get('settings'))?.value);
+    await db.kv.put({ key: 'settings', value: cleanSettings({ ...current, ...patch, targets: { ...current.targets, ...patch.targets } }) });
+  });
+}
+
+// --- Athlete profile ---------------------------------------------------------------------------------
+
+export function cleanAthlete(v: unknown): Athlete | null {
+  if (!isObj(v)) return null;
+  const name = cleanAthleteName(v.name);
+  if (!name) return null;
+  return { name, mode: v.mode === 'guest' ? 'guest' : 'athlete', createdAt: clampNum(v.createdAt, Date.now(), Number.MAX_SAFE_INTEGER) };
+}
+
+/** The saved athlete, or null before onboarding has been completed. */
+export async function getAthlete(): Promise<Athlete | null> {
+  return cleanAthlete((await db.kv.get('athlete'))?.value);
+}
+
+export async function renameAthlete(name: string): Promise<void> {
+  const current = await getAthlete();
+  const clean = cleanAthleteName(name);
+  if (!current || !clean) return;
+  await db.kv.put({ key: 'athlete', value: { ...current, name: clean } });
+}
+
+export interface OnboardingInput {
+  name: string;
+  schedule: Schedule;
+  unit: Unit;
+  kcal: number;
+  protein: number;
+  meals: number;
+}
+
+/** Finish onboarding with a real profile: an empty log with the chosen plan, units and targets. */
+export async function completeOnboarding(input: OnboardingInput): Promise<void> {
+  const name = cleanAthleteName(input.name);
+  if (!name) throw new Error('Enter a name or handle to continue.');
+  const settings = cleanSettings({ ...DEFAULT_SETTINGS, unit: input.unit, schedule: input.schedule, targets: deriveTargets(input.kcal, input.protein, input.meals) });
+  await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
+    await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
+    await db.kv.bulkPut([
+      { key: 'athlete', value: { name, mode: 'athlete', createdAt: Date.now() } satisfies Athlete },
+      { key: 'settings', value: settings },
+      { key: 'cues', value: DEFAULT_CUES },
+      { key: 'seeded', value: false },
+      { key: 'initialized', value: true },
+    ]);
+  });
+}
+
+/** Continue as a guest: sample data, default settings, no setup. */
+export async function continueAsGuest(): Promise<void> {
+  await seedSampleData();
+  await db.kv.put({ key: 'athlete', value: { name: 'Guest', mode: 'guest', createdAt: Date.now() } satisfies Athlete });
+}
+
+/**
+ * Clear everything logged (sessions, meals, weigh-ins, the session in progress,
+ * and any sample data) but keep the profile, plan, units and targets. A guest
+ * becomes a regular athlete, since they are now logging their own data.
+ */
+export async function startFresh(): Promise<void> {
+  await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
+    await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.delete('draft')]);
+    await db.kv.put({ key: 'seeded', value: false });
+    const a = cleanAthlete((await db.kv.get('athlete'))?.value);
+    if (a?.mode === 'guest') await db.kv.put({ key: 'athlete', value: { ...a, name: 'Athlete', mode: 'athlete' } satisfies Athlete });
+  });
+}
+
+/** Remove the profile and all data; the next screen is onboarding again. */
+export async function resetEverything(): Promise<void> {
+  await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
+    await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
+  });
 }
 
 /** Pinned exercise cues. Falls back to the built-in starting cues until you save your own. */
@@ -237,27 +330,18 @@ function sampleWeights(today: string): WeightEntry[] {
 export async function seedSampleData(): Promise<void> {
   const today = toISODate();
   await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
+    // Sample data replaces the logs only: who you are and your plan, units and targets stay.
+    const athlete = await db.kv.get('athlete');
+    const settings = await db.kv.get('settings');
     await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
+    if (athlete) await db.kv.put(athlete);
     await db.sessions.bulkPut(sampleSessions(today));
     await db.meals.bulkPut(sampleMeals(today));
     await db.weights.bulkPut(sampleWeights(today));
     await db.kv.bulkPut([
-      { key: 'settings', value: DEFAULT_SETTINGS },
+      { key: 'settings', value: settings ? cleanSettings(settings.value) : DEFAULT_SETTINGS },
       { key: 'cues', value: DEFAULT_CUES },
       { key: 'seeded', value: true },
-      { key: 'initialized', value: true },
-    ]);
-  });
-}
-
-/** Remove all data (sample or yours) and start empty. */
-export async function eraseAll(): Promise<void> {
-  await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
-    await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
-    await db.kv.bulkPut([
-      { key: 'settings', value: DEFAULT_SETTINGS },
-      { key: 'cues', value: DEFAULT_CUES },
-      { key: 'seeded', value: false },
       { key: 'initialized', value: true },
     ]);
   });
@@ -298,13 +382,25 @@ async function migrateLegacy(): Promise<boolean> {
 
 let initPromise: Promise<void> | null = null;
 
-/** Open the database and run first-run setup once. Rejects if IndexedDB is unavailable. */
+/**
+ * Open the database and run first-run setup once. Rejects if IndexedDB is
+ * unavailable. A first-time visitor is NOT given sample data here: the
+ * onboarding screen asks whether to create a profile or continue as a guest.
+ * Anyone who already has data (the old localStorage log, or a database from an
+ * earlier version of this page) is carried straight through with a profile.
+ */
 export function initFitnessDb(): Promise<void> {
   initPromise ??= (async () => {
     await db.open();
-    if ((await db.kv.get('initialized'))?.value) return;
-    if (await migrateLegacy()) return;
-    await seedSampleData();
+    const initialized = (await db.kv.get('initialized'))?.value === true;
+    if (!initialized && (await migrateLegacy())) {
+      await db.kv.put({ key: 'athlete', value: { name: 'Athlete', mode: 'athlete', createdAt: Date.now() } satisfies Athlete });
+      return;
+    }
+    if (initialized && !(await getAthlete())) {
+      const guest = (await db.kv.get('seeded'))?.value === true;
+      await db.kv.put({ key: 'athlete', value: { name: guest ? 'Guest' : 'Athlete', mode: guest ? 'guest' : 'athlete', createdAt: Date.now() } satisfies Athlete });
+    }
   })().catch((err) => {
     initPromise = null;
     throw err;
@@ -372,7 +468,9 @@ export async function importBackup(json: unknown): Promise<ImportSummary> {
   const cues = cleanCues(json.cues, DEFAULT_CUES);
 
   await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
+    const athlete = await db.kv.get('athlete'); // restoring a backup does not change who you are
     await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
+    if (athlete) await db.kv.put(athlete);
     await db.sessions.bulkPut(sessions);
     await db.meals.bulkPut(meals);
     await db.weights.bulkPut(weights);

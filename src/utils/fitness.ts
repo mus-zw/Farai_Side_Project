@@ -119,6 +119,35 @@ export const DEFAULT_CUES: Record<string, string> = {
   'pull-up or lat pulldown': 'Chest up, drive elbows down, full stretch at the bottom.',
 };
 
+/** Athlete profile: who is training, and whether this is a real profile or the sample-data guest. */
+export interface Athlete {
+  name: string;
+  mode: 'athlete' | 'guest';
+  createdAt: number;
+}
+export const MAX_ATHLETE_NAME = 24;
+
+/** A name or handle, trimmed and capped; null if there is nothing usable. */
+export function cleanAthleteName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  // Collapse whitespace and drop control characters.
+  const name = raw.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_ATHLETE_NAME);
+  return name.length >= 1 ? name : null;
+}
+
+/**
+ * Full daily targets from the three a person actually thinks about (calories,
+ * protein, meals): fat is set to about 28% of calories and carbs take the rest.
+ * Starting points, editable later.
+ */
+export function deriveTargets(kcal: number, protein: number, meals: number): Targets {
+  const k = Math.min(20000, Math.max(0, Math.round(kcal)));
+  const p = Math.min(1000, Math.max(0, Math.round(protein)));
+  const fat = Math.round((k * 0.28) / 9);
+  const carbs = Math.max(0, Math.round((k - p * 4 - fat * 9) / 4));
+  return { kcal: k, protein: p, carbs, fat, meals: Math.min(12, Math.max(1, Math.round(meals))) };
+}
+
 export const cueKey = (exerciseName: string): string => exerciseName.trim().toLowerCase();
 
 export const MAX_CUE_LENGTH = 140;
