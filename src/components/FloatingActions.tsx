@@ -1,16 +1,5 @@
-import React, { useState } from 'react';
-import {
-  Sparkles,
-  Layers,
-  Scale,
-  Files,
-  BarChart3,
-  Video,
-  Keyboard,
-  ArrowUp,
-  Plus,
-  X,
-} from 'lucide-react';
+import { useState } from 'react';
+import { Layers, Scale, Files, BarChart3, Video, Keyboard, ArrowUp, Plus, X } from 'lucide-react';
 
 interface FloatingActionsProps {
   mediaMode: 'image' | 'video';

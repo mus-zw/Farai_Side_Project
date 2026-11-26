@@ -59,7 +59,7 @@ export default function DemoLaunchingSoon() {
           >
             <Mail className="h-4 w-4" /> Get launch updates
           </a>
-          <span className="text-[11px] text-neutral-500">Opens a pre-filled email in your mail app; nothing is sent from this page.</span>
+          <span className="text-xs text-neutral-400">Opens a pre-filled email in your mail app; nothing is sent from this page.</span>
         </div>
       </header>
 
@@ -83,7 +83,7 @@ export default function DemoLaunchingSoon() {
       {DEMO_PREVIEW_CONFIGURED && (
         <div className="text-center">
           {!ownerOpen ? (
-            <button type="button" className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-300" onClick={() => setOwnerOpen(true)} data-testid="demo-owner-toggle">
+            <button type="button" className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-white" onClick={() => setOwnerOpen(true)} data-testid="demo-owner-toggle">
               <Lock className="h-3 w-3" /> Owner access
             </button>
           ) : (

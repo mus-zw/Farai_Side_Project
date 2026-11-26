@@ -1,14 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import {
-  Trash2,
-  Maximize2,
-  Clock,
-  Layers,
-  Sparkles,
-  Search,
-  Filter,
-  ArrowUpDown,
-} from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Trash2, Maximize2, Search, ArrowUpDown } from 'lucide-react';
 import { GalleryItem } from '../types';
 import { formatRelativeTime, capitalizeClass } from '../utils/formatters';
 import { getClassColor } from '../utils/colors';

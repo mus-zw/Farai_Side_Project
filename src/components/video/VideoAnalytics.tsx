@@ -1,13 +1,4 @@
-import React from 'react';
-import {
-  BarChart2,
-  TrendingUp,
-  Activity,
-  Layers,
-  Sparkles,
-  Download,
-  FileJson,
-} from 'lucide-react';
+import { BarChart2, FileJson } from 'lucide-react';
 import { VideoDetectionResponse } from '../../types';
 import { getClassColor } from '../../utils/colors';
 import { capitalizeClass, formatConfidencePercent } from '../../utils/formatters';

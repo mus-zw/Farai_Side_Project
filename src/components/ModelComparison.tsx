@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RefreshCw, Play, Scale, Maximize2 } from 'lucide-react';
 import { CompareResponse } from '../types';
 import { compareModels } from '../services/compareApi';

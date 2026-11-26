@@ -102,6 +102,21 @@ body {
   transform: translateY(0);
 }
 
+/* A calm, high-contrast solid button (navy on near-white, 16.9:1). Used for the main calls to action. */
+.btn-solid {
+  background-color: #F1F5F9;
+  color: #0F1419;
+  font-weight: 700;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.btn-solid:hover { background-color: #FFFFFF; }
+.btn-solid:active { transform: translateY(1px); }
+.btn-solid:focus-visible,
+.btn-lime:focus-visible {
+  outline: 2px solid #FFFFFF;
+  outline-offset: 2px;
+}
+
 /* ------------------------------------------------------------------------------------
    Fitness theme. Everything below is scoped to [data-theme="fitness"], so none of it
    touches the portfolio pages. The tokens are the only place the palette is defined.

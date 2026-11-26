@@ -1,7 +1,5 @@
-import React from 'react';
-import { ChevronLeft, ChevronRight, Download, Camera, Target, Clock } from 'lucide-react';
-import { FrameDetection, VideoDetectionResponse } from '../../types';
-import { getClassColor } from '../../utils/colors';
+import { ChevronLeft, ChevronRight, Download, Camera } from 'lucide-react';
+import { VideoDetectionResponse } from '../../types';
 import { capitalizeClass, formatConfidencePercent } from '../../utils/formatters';
 
 interface FrameAnalysisProps {

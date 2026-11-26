@@ -1,21 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import {
-  Upload,
-  Image as ImageIcon,
-  Sparkles,
-  Layers,
-  Scale,
-  Files,
-  BarChart3,
-  Server,
-  RefreshCw,
-  CheckCircle2,
-  AlertCircle,
-  X,
-  Keyboard,
-  Command,
-} from 'lucide-react';
+import { Upload, Image as ImageIcon, Sparkles, Layers, Scale, Files, BarChart3, Server, RefreshCw, CheckCircle2, AlertCircle, X, Keyboard } from 'lucide-react';
 import {
   detectObjects,
   VisionDetectionResult,
@@ -35,7 +20,6 @@ import {
 } from '../utils/galleryStorage';
 import { GalleryItem, SampleImageOption, ImageMetadata } from '../types';
 import ResultsDisplay from '../components/ResultsDisplay';
-import BeforeAfterSlider from '../components/BeforeAfterSlider';
 import ModelComparison from '../components/ModelComparison';
 import BatchUpload from '../components/BatchUpload';
 import Gallery from '../components/Gallery';
@@ -276,7 +260,7 @@ export default function Demo({ onNotify }: DemoProps) {
   const processImage = async (
     fileOrBlob: File | Blob,
     previewUrl: string,
-    sampleId?: string,
+    _sampleId?: string, // kept so the call sites stay positional; the active sample is tracked in state
     title: string = 'User Upload',
     meta?: ImageMetadata,
     engineOverride?: InferenceEngine

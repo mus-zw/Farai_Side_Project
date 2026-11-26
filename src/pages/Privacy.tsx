@@ -117,7 +117,7 @@ export default function Privacy() {
         </a>
         . If you are in South Africa you may also contact the Information Regulator.
       </p>
-      <p className="mt-8 text-xs text-neutral-500">
+      <p className="mt-8 text-xs text-neutral-400">
         <Link to="/" className="hover:underline">Back to the site</Link>
       </p>
     </div>

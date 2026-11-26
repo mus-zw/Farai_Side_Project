@@ -1,4 +1,3 @@
-import React from 'react';
 import { Download, FileCode, RefreshCw, Info } from 'lucide-react';
 import { ImageMetadata, DetectionScoreBreakdown } from '../types';
 import { VisionDetectionResult } from '../services/visionApi';

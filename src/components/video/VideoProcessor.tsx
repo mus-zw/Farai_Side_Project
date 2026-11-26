@@ -1,16 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import {
-  Video,
-  Play,
-  Layers,
-  Camera,
-  BarChart2,
-  Scale,
-  Download,
-  FileJson,
-  Sparkles,
-  RefreshCw,
-} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Play, Camera, BarChart2 } from 'lucide-react';
 import {
   VideoMetadata,
   VideoProcessingOptions,

@@ -72,16 +72,16 @@ export default function PreviewSlider() {
         </div>
       ) : (
         <div className="flex aspect-[16/10] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-neutral-700 bg-neutral-900/50 p-6 text-center" data-testid="preview-placeholder">
-          <ImageOff className="h-6 w-6 text-neutral-500" />
+          <ImageOff className="h-6 w-6 text-neutral-400" />
           <p className="text-sm font-semibold text-neutral-300">{status ? 'Preview image coming soon' : 'Loading preview…'}</p>
-          {status && <p className="max-w-sm text-xs text-neutral-500">{active.headline}</p>}
+          {status && <p className="max-w-sm text-xs text-neutral-400">{active.headline}</p>}
         </div>
       )}
 
       <div data-testid="preview-caption">
         <p className="text-sm font-bold text-white">{active.headline}</p>
         <p className="mt-0.5 text-xs text-neutral-400">{active.detail}</p>
-        <p className="mt-2 text-[11px] text-neutral-500">Drag the handle to compare. Real output from the in-browser detector, not a mock-up.</p>
+        <p className="mt-2 text-xs text-neutral-400">Drag the handle to compare. Real output from the in-browser detector, not a mock-up.</p>
       </div>
     </div>
   );

@@ -1,16 +1,6 @@
 import type * as OrtNs from 'onnxruntime-web';
 import { DetectionResponse, ImageMetadata } from '../types';
-import {
-  INPUT_SIZE,
-  computeLetterbox,
-  inferOutputLayout,
-  decodeOutput,
-  groupByClass,
-  classColorHex,
-  rgbaToChw,
-  PAD_VALUE,
-  Detection,
-} from '../utils/onnxDetect';
+import { computeLetterbox, inferOutputLayout, decodeOutput, groupByClass, classColorHex, rgbaToChw, PAD_VALUE, Detection } from '../utils/onnxDetect';
 import { layoutLabel, readableTextColor } from '../utils/videoOverlay';
 import { ORT_WASM_BASE_URL, modelFileUrl } from '../utils/modelUrls';
 import {

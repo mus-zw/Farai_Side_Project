@@ -91,7 +91,7 @@ export default function WorkWithMe() {
               </a>
             )}
           </div>
-          <p className="text-[11px] text-neutral-500 sm:col-span-2" data-testid="intake-note">
+          <p className="text-xs text-neutral-400 sm:col-span-2" data-testid="intake-note">
             {sent ? 'Your email app should have opened with the request ready to send. If it did not, write to ' : 'This opens a pre-filled email in your own mail app; nothing is sent from this page. Or write to '}
             <a className="text-neutral-300 underline-offset-2 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
           </p>

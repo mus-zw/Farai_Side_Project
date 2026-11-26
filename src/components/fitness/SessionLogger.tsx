@@ -1,27 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Check, Pin } from 'lucide-react';
-import {
-  DAY_LABEL,
-  DAY_TYPES,
-  DayType,
-  ExerciseLog,
-  Session,
-  SetEntry,
-  SET_TYPES,
-  SET_TYPE_LABEL,
-  SET_TYPE_TAG,
-  Settings,
-  blankSet,
-  cueKey,
-  dateLabel,
-  newExercise,
-  newSession,
-  num,
-  previousSets,
-  sessionSetCount,
-  sessionVolume,
-  workingSets,
-} from '../../utils/fitness';
+import { DAY_LABEL, DAY_TYPES, DayType, ExerciseLog, Session, SetEntry, SET_TYPES, SET_TYPE_LABEL, SET_TYPE_TAG, Settings, blankSet, cueKey, dateLabel, newExercise, newSession, num, previousSets, sessionSetCount, sessionVolume } from '../../utils/fitness';
 import { estimate1RM } from '../../utils/fitnessMath';
 import { db, getDraft, saveDraft, setCue } from '../../utils/fitnessDb';
 

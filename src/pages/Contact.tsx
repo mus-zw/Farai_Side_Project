@@ -1,17 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Mail,
-  Github,
-  Linkedin,
-  Send,
-  CheckCircle2,
-  AlertCircle,
-  MapPin,
-  Sparkles,
-  RefreshCw,
-  Compass,
-  ArrowRight,
-} from 'lucide-react';
+import { Mail, Github, Linkedin, Send, CheckCircle2, AlertCircle, MapPin } from 'lucide-react';
 
 interface ContactProps {
   onNotify: (type: 'success' | 'error' | 'info', message: string) => void;
@@ -31,7 +19,6 @@ export default function Contact({ onNotify }: ContactProps) {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
   // Email validation regex (RFC 5322 compatible)
@@ -282,7 +269,6 @@ export default function Contact({ onNotify }: ContactProps) {
                   value={name}
                   onChange={handleNameChange}
                   placeholder="e.g. Dr. Jane Smith or Alex Miller"
-                  disabled={isSubmitting}
                   className={`w-full rounded-xl border bg-[#0F1419] px-4 py-3 text-sm text-white placeholder-[#666666] focus:outline-none transition-colors ${
                     errors.name
                       ? 'border-rose-500 focus:border-rose-400'
@@ -309,7 +295,6 @@ export default function Contact({ onNotify }: ContactProps) {
                   value={email}
                   onChange={handleEmailChange}
                   placeholder="name@organization.com"
-                  disabled={isSubmitting}
                   className={`w-full rounded-xl border bg-[#0F1419] px-4 py-3 text-sm text-white placeholder-[#666666] focus:outline-none transition-colors ${
                     errors.email
                       ? 'border-rose-500 focus:border-rose-400'
@@ -336,7 +321,6 @@ export default function Contact({ onNotify }: ContactProps) {
                   value={message}
                   onChange={handleMessageChange}
                   placeholder="Describe your project, research question, or role requirements..."
-                  disabled={isSubmitting}
                   className={`w-full rounded-xl border bg-[#0F1419] px-4 py-3 text-sm text-white placeholder-[#666666] focus:outline-none transition-colors resize-y ${
                     errors.message
                       ? 'border-rose-500 focus:border-rose-400'
@@ -354,20 +338,10 @@ export default function Contact({ onNotify }: ContactProps) {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={isSubmitting}
-                className="btn-lime min-h-[48px] w-full flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-bold shadow-lg disabled:opacity-50"
+                className="btn-lime min-h-[48px] w-full flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 text-sm font-bold shadow-lg"
               >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 animate-spin text-[#0F1419]" />
-                    <span>Opening email app...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    <span>Send via Email App</span>
-                  </>
-                )}
+                <Send className="h-4 w-4" />
+                <span>Send via Email App</span>
               </button>
             </form>
           </div>

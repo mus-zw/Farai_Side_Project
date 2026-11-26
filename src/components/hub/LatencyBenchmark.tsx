@@ -86,12 +86,12 @@ export default function LatencyBenchmark() {
               ] as const
             ).map(([label, value]) => (
               <div key={label} className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-3 text-center">
-                <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
+                <div className="text-[11px] uppercase tracking-wide text-neutral-400">{label}</div>
                 <div className="mt-0.5 text-lg font-bold text-white" data-testid={`bench-${label === '≈ FPS' ? 'fps' : label.toLowerCase()}`}>{value}</div>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-neutral-500" data-testid="benchmark-meta">
+          <p className="mt-2 text-xs text-neutral-400" data-testid="benchmark-meta">
             {result.model} at {result.size}×{result.size} on {result.backend === 'webgpu' ? 'WebGPU' : 'WASM (CPU)'} · {result.stats.runs} runs · {result.image} · each run includes preprocessing, inference and decode.
           </p>
         </div>

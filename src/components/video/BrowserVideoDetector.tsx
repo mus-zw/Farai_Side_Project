@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import JSZip from 'jszip';
 import { Upload, Play, Square, AlertTriangle, FileText, Lock, Images } from 'lucide-react';
 import ConfidenceSlider from '../ConfidenceSlider';

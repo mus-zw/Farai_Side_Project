@@ -1,30 +1,13 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import JSZip from 'jszip';
-import {
-  Upload,
-  Files,
-  Play,
-  Download,
-  Trash2,
-  CheckCircle2,
-  RefreshCw,
-  AlertCircle,
-  Maximize2,
-  Clock,
-  Layers,
-  Sparkles,
-  X,
-  FolderOpen,
-  Lock,
-} from 'lucide-react';
+import { Files, Play, Download, Trash2, RefreshCw, AlertCircle, Maximize2, X, FolderOpen, Lock } from 'lucide-react';
 import { BatchItem } from '../types';
 import { detectObjects, validateAndExtractImageMetadata, type InferenceEngine } from '../services/visionApi';
 import type { BrowserModelConfig } from '../utils/browserModels';
 import { FREE_BATCH_LIMIT, batchAllowance } from '../utils/labTier';
 import { classesTxt, dataYaml, toCoco } from '../utils/labelExport';
 import { baseName, toYoloText } from '../utils/yoloLabels';
-import { formatBytes, capitalizeClass } from '../utils/formatters';
-import { getClassColor } from '../utils/colors';
+import { formatBytes } from '../utils/formatters';
 import { dataUrlBase64Payload, dataUrlExtension } from '../utils/dataUrl';
 
 interface BatchUploadProps {

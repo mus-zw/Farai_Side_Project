@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Play, Pause, RotateCcw, FastForward, Rewind } from 'lucide-react';
 import { VideoDetectionResponse } from '../../types';
 import {

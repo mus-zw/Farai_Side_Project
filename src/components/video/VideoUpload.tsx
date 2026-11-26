@@ -1,17 +1,5 @@
 import React, { useState, useRef } from 'react';
-import {
-  Video,
-  Upload,
-  Play,
-  Settings2,
-  Sparkles,
-  RefreshCw,
-  Film,
-  Sliders,
-  CheckCircle2,
-  Clock,
-  Layers,
-} from 'lucide-react';
+import { Video, Play, Sparkles, RefreshCw, Film } from 'lucide-react';
 import { VideoMetadata, VideoProcessingOptions } from '../../types';
 import { validateAndExtractVideoMetadata } from '../../services/videoApi';
 import { generateBenchmarkTrafficVideo } from '../../utils/sampleVideo';

@@ -16,11 +16,14 @@ export default function CaseStudies() {
   const demoGate = useDemoGate();
   return (
     <section id="projects" className="mx-auto max-w-7xl scroll-mt-24 space-y-4 px-4 sm:px-6 lg:px-8" data-testid="case-studies">
-      <h2 className="font-display text-xl font-bold text-white">Projects</h2>
+      <div className="space-y-1">
+        <h2 className="font-display text-2xl font-bold text-white sm:text-3xl">What I&apos;ve built</h2>
+        <p className="max-w-2xl text-sm text-neutral-400">Two working products, built and tested. Both are finishing up before their public launch.</p>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {STUDIES.map((s) => (
           <SiteLink key={s.tool} to={linkTo(s.tool)} className="group block rounded-2xl border border-[#16213E] bg-[#16213E]/30 p-5 transition-colors hover:border-neutral-600" data-testid={`case-${s.tool}`}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">{s.label}</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400">{s.label}</div>
             <div className="mt-1 flex items-center justify-between gap-2 text-sm font-bold text-white">
               <span className="flex flex-wrap items-center gap-2">
                 {s.title}
@@ -30,8 +33,8 @@ export default function CaseStudies() {
               <ArrowUpRight className="h-4 w-4 text-neutral-500 transition-colors group-hover:text-[#32FF00]" />
             </div>
             <p className="mt-1.5 text-xs leading-relaxed text-neutral-400">{s.body}</p>
-            {s.note && <p className="mt-2 text-[11px] text-neutral-500">{s.note}</p>}
-            <span className="mt-3 inline-block text-xs font-semibold text-[#32FF00]">{(s.tool === 'fitness' && gate.badge) || (s.tool === 'lab' && demoGate.badge) ? "See what's coming" : s.cta} →</span>
+            {s.note && <p className="mt-2 text-xs text-neutral-400">{s.note}</p>}
+            <span className="mt-3 inline-block text-sm font-semibold text-white underline underline-offset-4">{(s.tool === 'fitness' && gate.badge) || (s.tool === 'lab' && demoGate.badge) ? "See what's coming" : s.cta} →</span>
           </SiteLink>
         ))}
       </div>

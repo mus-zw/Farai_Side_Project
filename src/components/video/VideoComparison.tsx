@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { Play, Pause, RotateCcw, Scale, Columns, Sparkles } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Play, Pause, RotateCcw, Scale } from 'lucide-react';
 import { VideoDetectionResponse } from '../../types';
 
 interface VideoComparisonProps {

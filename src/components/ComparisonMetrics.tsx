@@ -1,4 +1,3 @@
-import React from 'react';
 import { Zap, Target, Award, GitCompare } from 'lucide-react';
 import { CompareResponse, ModelComparisonEntry } from '../types';
 import { formatConfidencePercent, capitalizeClass } from '../utils/formatters';

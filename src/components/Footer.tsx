@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
-import LaunchBadge from './LaunchBadge';
+import { useDemoGate } from '../utils/demoGate';
 import { Github, Linkedin, Mail, GraduationCap, MapPin } from 'lucide-react';
 
 export default function Footer() {
+  // Only link to the demo once visitors can open it.
+  const demoLocked = useDemoGate().badge;
   return (
     <footer className="border-t border-[#16213E] bg-[#0A0E17] py-12 text-sm text-[#CCCCCC]">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -52,12 +54,13 @@ export default function Footer() {
                   Projects (Auto-Labeler &amp; Fitness)
                 </Link>
               </li>
-              <li>
-                <Link to="/demo" className="text-[#CCCCCC] hover:text-[#32FF00] transition-colors inline-flex items-center gap-2 py-1" data-testid="footer-demo">
-                  Interactive CV Suite
-                  <LaunchBadge product="demo" />
-                </Link>
-              </li>
+              {!demoLocked && (
+                <li>
+                  <Link to="/demo" className="text-[#CCCCCC] hover:text-white transition-colors inline-block py-1" data-testid="footer-demo">
+                    Interactive CV Suite
+                  </Link>
+                </li>
+              )}
               <li>
                 <Link to="/about#skills" className="text-[#CCCCCC] hover:text-[#32FF00] transition-colors inline-block py-1">
                   Technical Skills & Stack

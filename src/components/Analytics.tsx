@@ -1,15 +1,4 @@
-import React from 'react';
-import {
-  BarChart3,
-  TrendingUp,
-  Cpu,
-  Layers,
-  Clock,
-  Sparkles,
-  Download,
-  FileSpreadsheet,
-  FileJson,
-} from 'lucide-react';
+import { BarChart3, TrendingUp, Layers, Clock, Sparkles, FileSpreadsheet, FileJson } from 'lucide-react';
 import { GalleryItem } from '../types';
 import { capitalizeClass } from '../utils/formatters';
 import { getClassColor } from '../utils/colors';
