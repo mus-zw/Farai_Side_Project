@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { DEFAULT_SAMPLE } from '../utils/sampleData';
 import SkillsSection from '../components/SkillsSection';
+import InterestShortcuts from '../components/InterestShortcuts';
 
 export default function Home() {
   const sample = DEFAULT_SAMPLE; // a scene COCO models handle well; real output comes only from /demo
@@ -124,6 +125,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Shortcuts, with the visitor's chosen interests first */}
+      <InterestShortcuts />
 
       {/* 2. Researcher Bio Statement Section */}
       <section id="bio" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 scroll-mt-24">

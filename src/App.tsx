@@ -7,6 +7,9 @@ import Home from './pages/Home';
 import Demo from './pages/Demo';
 import About from './pages/About';
 import Contact from './pages/Contact';
+import Fitness from './pages/Fitness';
+import { ProfileProvider } from './components/ProfileProvider';
+import ProfileModal from './components/ProfileModal';
 
 /**
  * Handles smooth scrolling on navigation:
@@ -47,6 +50,7 @@ export default function App() {
   };
 
   return (
+    <ProfileProvider>
     <BrowserRouter>
       <ScrollHandler />
       <div className="flex min-h-screen flex-col bg-[#0F1419] text-[#CCCCCC] font-sans selection:bg-[#32FF00] selection:text-[#0F1419]">
@@ -57,6 +61,7 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/home" element={<Home />} />
             <Route path="/demo" element={<Demo onNotify={addNotification} />} />
+            <Route path="/fitness" element={<Fitness onNotify={addNotification} />} />
             <Route path="/about" element={<About />} />
             <Route path="/contact" element={<Contact onNotify={addNotification} />} />
             {/* Fallback route */}
@@ -65,8 +70,10 @@ export default function App() {
         </main>
 
         <Footer />
+        <ProfileModal />
         <Toast toasts={toasts} onDismiss={dismissNotification} />
       </div>
     </BrowserRouter>
+    </ProfileProvider>
   );
 }

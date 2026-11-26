@@ -1,18 +1,34 @@
 import { useState, useEffect } from 'react';
 import { NavLink, Link, useLocation } from 'react-router-dom';
-import { Menu, X, Sparkles, Terminal } from 'lucide-react';
+import { Menu, X, Sparkles, Terminal, Dumbbell, UserCircle2 } from 'lucide-react';
+import { useProfile } from './ProfileProvider';
+import { InterestId, orderByInterests } from '../utils/interests';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const { profile, openProfile } = useProfile();
 
-  // All 4 required routes correctly mapped
+  // Home first, then Demo and Fitness with the visitor's interests on top, then About and Contact.
+  const interestLinks: { name: string; path: string; interest?: InterestId }[] = orderByInterests(
+    [
+      { name: 'Demo', path: '/demo', interest: 'cv' as InterestId },
+      { name: 'Fitness', path: '/fitness', interest: 'fitness' as InterestId },
+    ],
+    profile.interests
+  );
   const navLinks = [
     { name: 'Home', path: '/home' },
-    { name: 'Demo', path: '/demo' },
+    ...interestLinks,
     { name: 'About', path: '/about' },
     { name: 'Contact', path: '/contact' },
   ];
+  // The big button points at the first interest picked (the CV demo by default).
+  const cta =
+    profile.interests[0] === 'fitness'
+      ? { to: '/fitness', label: 'Open Fitness', Icon: Dumbbell }
+      : { to: '/demo', label: 'Launch CV Demo', Icon: Sparkles };
+  const initial = profile.signedIn ? profile.name.charAt(0).toUpperCase() : '';
 
   // Helper to determine if Home link should be active when user visits '/'
   const isLinkActive = (path: string, routerIsActive: boolean) => {
@@ -98,16 +114,33 @@ export default function Navbar() {
             ))}
           </nav>
 
+          <div className="flex items-center gap-3">
           {/* Primary Action Button */}
           <div className="hidden md:flex items-center gap-4">
             <NavLink
-              to="/demo"
+              to={cta.to}
+              data-testid="nav-cta"
               className="btn-lime min-h-[40px] flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold shadow-[0_0_15px_rgba(50,255,0,0.3)] transition-all active:scale-95"
             >
-              <Sparkles className="h-3.5 w-3.5 fill-current" />
-              <span>Launch CV Demo</span>
+              <cta.Icon className="h-3.5 w-3.5 fill-current" />
+              <span>{cta.label}</span>
             </NavLink>
           </div>
+
+          {/* Account / interests */}
+          <button
+            type="button"
+            data-testid="account-button"
+            onClick={openProfile}
+            aria-label={profile.signedIn ? `Profile: ${profile.name}` : 'Sign in or set interests'}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5 rounded-lg border border-[#16213E] bg-[#16213E]/50 px-2 text-[#CCCCCC] hover:text-[#32FF00] hover:border-[#32FF00]/40 cursor-pointer"
+          >
+            {initial ? (
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#32FF00] text-xs font-bold text-[#0F1419]">{initial}</span>
+            ) : (
+              <UserCircle2 className="h-5 w-5" />
+            )}
+          </button>
 
           {/* Mobile menu trigger */}
           <button
@@ -119,6 +152,7 @@ export default function Navbar() {
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
+          </div>
         </div>
 
         {/* Mobile Drawer using React Router's NavLink */}
@@ -152,12 +186,12 @@ export default function Navbar() {
               ))}
               <div className="pt-4">
                 <NavLink
-                  to="/demo"
+                  to={cta.to}
                   onClick={() => setMobileMenuOpen(false)}
                   className="btn-lime min-h-[44px] w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold shadow-md"
                 >
-                  <Sparkles className="h-4 w-4 fill-current" />
-                  <span>Launch CV Demo</span>
+                  <cta.Icon className="h-4 w-4 fill-current" />
+                  <span>{cta.label}</span>
                 </NavLink>
               </div>
             </nav>
