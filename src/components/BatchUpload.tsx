@@ -338,7 +338,7 @@ export default function BatchUpload({
               {isPro ? <FolderOpen className="h-3.5 w-3.5 text-[#32FF00]" /> : <Lock className="h-3.5 w-3.5 text-amber-300" />} Choose a folder{isPro ? '' : ' (Pro)'}
             </button>
             {!isPro && (
-              <p className="text-[11px] text-neutral-500" data-testid="batch-limit-note">
+              <p className="text-[11px] text-neutral-400" data-testid="batch-limit-note">
                 Free sandbox: up to {FREE_BATCH_LIMIT} images per batch ({items.length}/{FREE_BATCH_LIMIT} queued).
               </p>
             )}
@@ -490,7 +490,7 @@ export default function BatchUpload({
                     <span>{Object.keys(item.result.detections).length} classes</span>
                   </div>
                 ) : (
-                  <div className="text-[10px] text-neutral-500 pt-1 border-t border-neutral-800">
+                  <div className="text-[10px] text-neutral-400 pt-1 border-t border-neutral-800">
                     Status: <span className="capitalize">{item.status}</span>
                   </div>
                 )}
@@ -513,7 +513,7 @@ export default function BatchUpload({
                     <button
                       type="button"
                       onClick={() => removeBatchItem(item.id)}
-                      className="text-neutral-500 hover:text-rose-400 p-1"
+                      className="text-neutral-400 hover:text-rose-400 p-1"
                       title="Remove"
                     >
                       <X className="h-3.5 w-3.5" />

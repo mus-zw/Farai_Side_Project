@@ -510,7 +510,7 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-sm font-bold text-white">Video detection in your browser</h3>
-            <p className="text-[11px] text-neutral-500">
+            <p className="text-[11px] text-neutral-400">
               The video stays on this device. Frames are checked locally and never sent to /api/detect.
             </p>
           </div>
@@ -560,7 +560,7 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
           </p>
         )}
         {!url && !error && (
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-neutral-400">
             Pick a short clip (MP4 or WebM). Up to {fmtMB(MAX_VIDEO_BYTES)} and {fmtTime(MAX_VIDEO_SECONDS)}; under 30 seconds works best.
           </p>
         )}
@@ -599,7 +599,7 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
             <span>
               {fmtTime(fileInfo.seconds)} · {fileInfo.w}×{fileInfo.h} · {fmtMB(fileInfo.bytes)}
             </span>
-            <span className={detecting ? 'text-[#32FF00]' : 'text-neutral-500'}>
+            <span className={detecting ? 'text-[#32FF00]' : 'text-neutral-400'}>
               {detecting ? (phase || 'Detecting') : 'Detection off'}
             </span>
             {detecting && !phase && (
@@ -649,7 +649,7 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
                 {labPro ? <Images className="h-3.5 w-3.5 text-[#32FF00]" /> : <Lock className="h-3.5 w-3.5 text-amber-300" />} Extract frames + labels{labPro ? '' : ' (Pro)'}
               </button>
             )}
-            <span className="text-neutral-500">Up to 300 frames, built here and saved only to your downloads.</span>
+            <span className="text-neutral-400">Up to 300 frames, built here and saved only to your downloads.</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -662,7 +662,7 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
             >
               <FileText className="h-3.5 w-3.5" /> Export YOLO Labels (.txt)
             </button>
-            <span className="text-neutral-500">Pause on a frame, with detection on, to export its boxes.</span>
+            <span className="text-neutral-400">Pause on a frame, with detection on, to export its boxes.</span>
           </div>
 
           <ConfidenceSlider
@@ -671,7 +671,7 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
             totalAvailable={stats.objects}
             shownCount={stats.objects}
           />
-          <p className="text-[11px] text-neutral-500">
+          <p className="text-[11px] text-neutral-400">
             The model is slower than playback, so some frames are skipped; boxes follow the most recent frame checked.
             Use pause or the seek bar to inspect a single frame.
           </p>

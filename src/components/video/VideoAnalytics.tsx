@@ -65,7 +65,7 @@ export default function VideoAnalytics({
           <div className="font-mono text-2xl font-bold text-white tabular-nums">
             {summary.total_objects}
           </div>
-          <p className="text-[10px] text-neutral-500">Cumulative detections over run</p>
+          <p className="text-[10px] text-neutral-400">Cumulative detections over run</p>
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 space-y-1">
@@ -73,7 +73,7 @@ export default function VideoAnalytics({
           <div className="font-mono text-2xl font-bold text-[#32FF00] tabular-nums">
             {summary.peak_frame_count} objs
           </div>
-          <p className="text-[10px] text-neutral-500">at frame #{summary.peak_frame}</p>
+          <p className="text-[10px] text-neutral-400">at frame #{summary.peak_frame}</p>
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 space-y-1">
@@ -81,7 +81,7 @@ export default function VideoAnalytics({
           <div className="font-mono text-2xl font-bold text-cyan-400 tabular-nums">
             {detectionData.fps} FPS
           </div>
-          <p className="text-[10px] text-neutral-500">As encoded in the uploaded file</p>
+          <p className="text-[10px] text-neutral-400">As encoded in the uploaded file</p>
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 space-y-1">
@@ -89,7 +89,7 @@ export default function VideoAnalytics({
           <div className="font-mono text-2xl font-bold text-pink-400 tabular-nums">
             {detectionData.duration_seconds.toFixed(1)}s
           </div>
-          <p className="text-[10px] text-neutral-500">{total_frames} total frames</p>
+          <p className="text-[10px] text-neutral-400">{total_frames} total frames</p>
         </div>
       </div>
 
@@ -124,7 +124,7 @@ export default function VideoAnalytics({
             );
           })}
         </div>
-        <div className="flex items-center justify-between text-[10px] font-mono text-neutral-500 pt-1 border-t border-neutral-800">
+        <div className="flex items-center justify-between text-[10px] font-mono text-neutral-400 pt-1 border-t border-neutral-800">
           <span>0.0s (Start)</span>
           <span>Timeline (Time Elapsed)</span>
           <span>{detectionData.duration_seconds.toFixed(1)}s (End)</span>

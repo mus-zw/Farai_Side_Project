@@ -444,7 +444,7 @@ export default function VideoPlayer({
                     ? 'border-[#32FF00] bg-[#32FF00]/15 text-white'
                     : now > 0
                     ? 'border-neutral-600 text-white hover:border-neutral-400'
-                    : 'border-neutral-800 text-neutral-500 hover:text-neutral-300'
+                    : 'border-neutral-800 text-neutral-400 hover:text-neutral-300'
                 }`}
               >
                 <span

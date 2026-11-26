@@ -47,6 +47,19 @@ export function getApiBaseUrl(): string {
   return normaliseBaseUrl(ENV_BACKEND_URL);
 }
 
+/**
+ * Whether a backend was deliberately set up: built in with VITE_API_URL, or a URL the visitor saved.
+ * Without one the demo runs detection in the browser instead of probing a server that is not there.
+ */
+export function hasConfiguredBackend(): boolean {
+  if (import.meta.env.VITE_API_URL) return true;
+  try {
+    return Boolean(localStorage.getItem(BASE_URL_STORAGE_KEY) || localStorage.getItem(LEGACY_ENDPOINT_STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}
+
 export function setApiBaseUrl(url: string): void {
   if (typeof window === 'undefined') return;
   try {

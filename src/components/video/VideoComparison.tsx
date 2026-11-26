@@ -82,7 +82,7 @@ export default function VideoComparison({
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-neutral-300">
             <span className="font-semibold">Stream 1: Raw Source Capture</span>
-            <span className="font-mono text-neutral-500 text-[11px]">Unannotated</span>
+            <span className="font-mono text-neutral-400 text-[11px]">Unannotated</span>
           </div>
           <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl border border-neutral-800 bg-black">
             <video

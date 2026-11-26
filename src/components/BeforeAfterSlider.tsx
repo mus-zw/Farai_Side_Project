@@ -68,7 +68,8 @@ export default function BeforeAfterSlider({
             <button
               type="button"
               onClick={() => setViewMode('slider')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors ${
+              aria-pressed={viewMode === 'slider'}
+              className={`flex min-h-[32px] items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors ${
                 viewMode === 'slider'
                   ? 'bg-[#16213E] text-[#32FF00] font-bold shadow-sm'
                   : 'text-[#CCCCCC] hover:text-white'
@@ -80,7 +81,8 @@ export default function BeforeAfterSlider({
             <button
               type="button"
               onClick={() => setViewMode('side-by-side')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors ${
+              aria-pressed={viewMode === 'side-by-side'}
+              className={`flex min-h-[32px] items-center gap-1.5 px-2.5 py-1 rounded-md transition-colors ${
                 viewMode === 'side-by-side'
                   ? 'bg-[#16213E] text-[#32FF00] font-bold shadow-sm'
                   : 'text-[#CCCCCC] hover:text-white'
@@ -102,8 +104,9 @@ export default function BeforeAfterSlider({
             <button
               type="button"
               onClick={() => onExpandFullscreen(annotatedImage, altTitle)}
-              className="flex items-center gap-1 hover:text-[#32FF00] p-1 transition-colors text-white"
+              className="flex min-h-[32px] items-center gap-1 px-2 hover:text-[#32FF00] transition-colors text-white"
               title="Expand in fullscreen"
+              aria-label="Expand in fullscreen"
             >
               <Maximize2 className="h-3.5 w-3.5 text-[#32FF00]" />
               <span className="text-[11px]">Fullscreen</span>

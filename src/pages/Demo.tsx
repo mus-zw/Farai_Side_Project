@@ -8,7 +8,7 @@ import {
   AnalysisOptions,
   InferenceEngine,
 } from '../services/visionApi';
-import { getApiBaseUrl, setApiBaseUrl } from '../services/apiClient';
+import { getApiBaseUrl, hasConfiguredBackend, setApiBaseUrl } from '../services/apiClient';
 import { getHealth, getModelInfo, HealthResponse, ModelInfoResponse } from '../services/systemApi';
 import { SAMPLE_IMAGES } from '../utils/sampleData';
 import { dataUrlExtension } from '../utils/dataUrl';
@@ -77,15 +77,29 @@ export default function Demo({ onNotify }: DemoProps) {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Where single-image detection runs. 'backend' is the default; 'browser'
-  // runs the ONNX model locally (services/browserInference.ts), no server needed.
+  // Where single-image detection runs. 'browser' runs the ONNX model locally
+  // (services/browserInference.ts), no server needed. A visitor's own choice wins; without one the
+  // backend is the default only when one was actually configured, so a site with no backend never
+  // shows a "cannot reach the backend" error or makes requests to a server that is not there.
   const [engine, setEngine] = useState<InferenceEngine>(() => {
     try {
-      return localStorage.getItem(ENGINE_STORAGE_KEY) === 'browser' ? 'browser' : 'backend';
+      const saved = localStorage.getItem(ENGINE_STORAGE_KEY);
+      if (saved === 'browser' || saved === 'backend') return saved;
     } catch {
-      return 'backend';
+      // Storage unavailable: use the default below.
     }
+    return hasConfiguredBackend() ? 'backend' : 'browser';
   });
+  // Whether the visitor has picked an engine before (only then do we start the large download unasked).
+  const chosenBefore = useRef<boolean>(
+    (() => {
+      try {
+        return localStorage.getItem(ENGINE_STORAGE_KEY) === 'browser';
+      } catch {
+        return false;
+      }
+    })()
+  );
   const [browserPhase, setBrowserPhase] = useState<string>('');
   const [browserBackend, setBrowserBackend] = useState<'webgpu' | 'wasm' | null>(null);
   const [browserNote, setBrowserNote] = useState<string | null>(null);
@@ -131,6 +145,16 @@ export default function Demo({ onNotify }: DemoProps) {
   const activeObjectUrlRef = useRef<string | null>(null);
   const rerunTimerRef = useRef<number | null>(null);
 
+  // Escape closes the sample picker.
+  useEffect(() => {
+    if (!sampleModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSampleModalOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sampleModalOpen]);
+
   // Poll backend status so "backend down" is visible before an upload fails.
   const refreshBackendStatus = useCallback(async () => {
     try {
@@ -144,11 +168,17 @@ export default function Demo({ onNotify }: DemoProps) {
     }
   }, []);
 
+  // Only while the backend engine is selected: otherwise nothing shows the result, and there may be no server.
   useEffect(() => {
+    if (engine !== 'backend') {
+      setHealth(null);
+      setHealthError(null);
+      return;
+    }
     refreshBackendStatus();
     const timer = window.setInterval(refreshBackendStatus, 15000);
     return () => window.clearInterval(timer);
-  }, [refreshBackendStatus]);
+  }, [engine, refreshBackendStatus]);
 
   // Load the in-browser runtime and model ahead of the first image, so the
   // wait (about 40 MB on the very first visit) shows up in the engine bar.
@@ -206,8 +236,8 @@ export default function Demo({ onNotify }: DemoProps) {
   );
 
   useEffect(() => {
-    if (engine === 'browser') preloadBrowserModel();
-    // Only on mount: a remembered 'browser' choice starts loading right away.
+    if (engine === 'browser' && chosenBefore.current) preloadBrowserModel();
+    // Only on mount: a remembered 'browser' choice starts loading right away; a default one waits for the first image.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -245,6 +275,14 @@ export default function Demo({ onNotify }: DemoProps) {
     setBrowserPhase('');
     if (result.inference_engine === 'webgpu' || result.inference_engine === 'wasm') {
       setBrowserBackend(result.inference_engine);
+      // Show what really ran. A model loaded while detecting (not preloaded) otherwise leaves the bar
+      // naming the one that was asked for, and its fallback reason unseen.
+      const ran = (result as Partial<{ model_config: BrowserModelConfig; fallback_reason: string }>);
+      if (ran.model_config) setBrowserLoadedCfg(ran.model_config);
+      if (ran.fallback_reason) setBrowserNote(ran.fallback_reason);
+      else if (result.inference_engine === 'wasm') {
+        setBrowserNote((n) => n ?? 'Running on the CPU (WASM): this browser did not use WebGPU, so detection is slower.');
+      }
     }
   };
 
@@ -829,7 +867,7 @@ export default function Demo({ onNotify }: DemoProps) {
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-neutral-500">
+              <p className="text-[11px] text-neutral-400">
                 {engine === 'browser'
                   ? 'Images, batches and video files run on this device. Comparison always uses the backend.'
                   : 'Needs the backend server. No server? Run it in your browser instead.'}
@@ -857,18 +895,18 @@ export default function Demo({ onNotify }: DemoProps) {
                       {(browserLoadedCfg ?? browserModelCfg).size}×{(browserLoadedCfg ?? browserModelCfg).size}
                     </span>
                   ) : (
-                    <span className="text-amber-300">{browserPhase || 'Starting…'}</span>
+                    <span className="text-amber-300">{browserPhase || 'Loads when you add your first image'}</span>
                   )}
                 </div>
                 {/* Model and input size. Files that are not in public/models/ fall back to yolo11n @ 640. */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">
-                  <label className="flex items-center gap-2 text-neutral-400">
+                  <label className="flex max-w-full min-w-0 items-center gap-2 text-neutral-400">
                     Model
                     <select
                       data-testid="browser-model-select"
                       value={browserModelCfg.modelId}
                       onChange={(e) => chooseBrowserModel(parseConfig(e.target.value, browserModelCfg.size))}
-                      className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200"
+                      className="min-h-[32px] min-w-0 max-w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200"
                     >
                       {BROWSER_MODELS.map((m) => {
                         const missing = modelAvailability[configKey({ modelId: m.id, size: browserModelCfg.size })] === false;
@@ -880,13 +918,13 @@ export default function Demo({ onNotify }: DemoProps) {
                       })}
                     </select>
                   </label>
-                  <label className="flex items-center gap-2 text-neutral-400">
+                  <label className="flex max-w-full min-w-0 items-center gap-2 text-neutral-400">
                     Input size
                     <select
                       data-testid="browser-size-select"
                       value={browserModelCfg.size}
                       onChange={(e) => chooseBrowserModel(parseConfig(browserModelCfg.modelId, e.target.value))}
-                      className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200"
+                      className="min-h-[32px] min-w-0 max-w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200"
                     >
                       {BROWSER_INPUT_SIZES.map((size) => {
                         const missing = modelAvailability[configKey({ modelId: browserModelCfg.modelId, size })] === false;
@@ -900,9 +938,9 @@ export default function Demo({ onNotify }: DemoProps) {
                     </select>
                   </label>
                 </div>
-                {browserNote && !browserLoadError && <p className="text-[11px] text-neutral-500">{browserNote}</p>}
+                {browserNote && !browserLoadError && <p className="text-[11px] text-neutral-400">{browserNote}</p>}
                 {!browserBackend && !browserLoadError && (
-                  <p className="text-[11px] text-neutral-500">
+                  <p className="text-[11px] text-neutral-400">
                     First use downloads about 40 MB (runtime and model); your browser keeps it for next time.
                     Nothing you upload leaves this page.
                   </p>
@@ -1056,7 +1094,7 @@ export default function Demo({ onNotify }: DemoProps) {
                     <button
                       type="button"
                       onClick={handleReset}
-                      className="hover:text-white text-neutral-400 underline font-medium text-xs"
+                      className="inline-flex min-h-[32px] items-center hover:text-white text-neutral-400 underline font-medium text-xs"
                     >
                       Reset Workspace
                     </button>
@@ -1120,7 +1158,7 @@ export default function Demo({ onNotify }: DemoProps) {
               >
                 {labPro ? <FileText className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5 text-amber-300" />} Export COCO JSON{labPro ? '' : ' (Pro)'}
               </button>
-              <span className="text-neutral-500">
+              <span className="text-neutral-400">
                 {detectionResult.raw_detections.length} box(es) at {Math.round(confidenceThreshold * 100)}% confidence · class 0 ={' '}
                 {detectionResult.class_names?.[0] ?? '—'}
               </span>
@@ -1262,6 +1300,7 @@ export default function Demo({ onNotify }: DemoProps) {
         <div
           role="dialog"
           aria-modal="true"
+          aria-label="Select a sample image"
           className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/80 p-4 backdrop-blur-sm"
         >
           <div className="relative w-full max-w-2xl rounded-2xl border border-neutral-800 bg-neutral-900 p-6 shadow-2xl">
@@ -1271,12 +1310,13 @@ export default function Demo({ onNotify }: DemoProps) {
                   Select a Sample Image
                 </h3>
                 <p className="text-xs text-neutral-400">
-                  Input images only: every detection shown comes from the live backend
+                  Input images only: detections are computed by the engine you selected, in your browser or on the backend
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSampleModalOpen(false)}
+                aria-label="Close sample picker"
                 className="min-h-[44px] min-w-[44px] flex items-center justify-center text-neutral-400 hover:text-white"
               >
                 <X className="h-5 w-5" />
@@ -1306,39 +1346,44 @@ export default function Demo({ onNotify }: DemoProps) {
                       {items.map((sample) => (
                     <div
                       key={sample.id}
-                      onClick={() => handleSelectSample(sample)}
-                      className="cursor-pointer rounded-xl border border-neutral-800 bg-neutral-950 p-3 hover:border-[#32FF00] transition-all flex flex-col justify-between"
+                      className="rounded-xl border border-neutral-800 bg-neutral-950 p-3 transition-all flex flex-col justify-between hover:border-[#32FF00] focus-within:border-[#32FF00]"
                     >
-                      <div className="aspect-[4/3] w-full overflow-hidden rounded-lg bg-neutral-900">
-                        <img
-                          src={sample.dataUrl}
-                          alt={sample.title}
-                          className="h-full w-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
-                      <div className="mt-2 space-y-1">
-                        <h4 className="text-xs font-semibold text-white truncate">
-                          {sample.title}
-                        </h4>
-                        <p className="text-[11px] text-neutral-400 line-clamp-2">
-                          {sample.description}
-                        </p>
-                        <div className="pt-1 text-[10px] text-[#32FF00] font-medium">
-                          {sample.category}
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSample(sample)}
+                        aria-label={`Use sample image: ${sample.title}`}
+                        className="block w-full cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#32FF00] rounded-lg"
+                      >
+                        <div className="aspect-[4/3] w-full overflow-hidden rounded-lg bg-neutral-900">
+                          <img
+                            src={sample.dataUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
                         </div>
-                        {sample.source && (
-                          <a
-                            href={sample.source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="block text-[10px] text-neutral-500 underline hover:text-neutral-300"
-                          >
-                            Source: Ultralytics
-                          </a>
-                        )}
-                      </div>
+                        <div className="mt-2 space-y-1">
+                          <h4 className="text-xs font-semibold text-white truncate">
+                            {sample.title}
+                          </h4>
+                          <p className="text-[11px] text-neutral-400 line-clamp-2">
+                            {sample.description}
+                          </p>
+                          <div className="pt-1 text-[10px] text-[#32FF00] font-medium">
+                            {sample.category}
+                          </div>
+                        </div>
+                      </button>
+                      {sample.source && (
+                        <a
+                          href={sample.source.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex min-h-[24px] items-center text-[10px] text-neutral-400 underline hover:text-neutral-300"
+                        >
+                          Source: Ultralytics
+                        </a>
+                      )}
                     </div>
                       ))}
                     </div>

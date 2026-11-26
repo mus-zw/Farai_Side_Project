@@ -16,7 +16,7 @@ export default function LabTierStrip() {
         </span>
         {pro ? 'Pro / Batch Studio: unlimited batches, video-frame extraction, YOLO + COCO export.' : `Free Sandbox: single images, batches up to ${FREE_BATCH_LIMIT}, YOLO .txt export.`}
       </span>
-      <button type="button" onClick={() => openLabUnlock()} className="inline-flex items-center gap-1.5 font-semibold text-[#32FF00] hover:underline" data-testid="lab-tier-button">
+      <button type="button" onClick={() => openLabUnlock()} className="inline-flex min-h-[32px] items-center gap-1.5 font-semibold text-[#32FF00] hover:underline" data-testid="lab-tier-button">
         <Sparkles className="h-3.5 w-3.5" /> {pro ? 'Manage' : 'Unlock Pro'}
       </button>
     </div>

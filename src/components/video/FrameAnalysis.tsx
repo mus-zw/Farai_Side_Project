@@ -83,7 +83,7 @@ export default function FrameAnalysis({
         </div>
 
         {(!frame?.boxes || frame.boxes.length === 0) ? (
-          <p className="text-xs text-neutral-500 py-4 text-center">
+          <p className="text-xs text-neutral-400 py-4 text-center">
             No objects detected in this specific frame.
           </p>
         ) : (
@@ -104,7 +104,7 @@ export default function FrameAnalysis({
                       <div className="text-xs font-semibold text-white">
                         {capitalizeClass(box.className)}
                       </div>
-                      <div className="text-[10px] text-neutral-500 font-mono">
+                      <div className="text-[10px] text-neutral-400 font-mono">
                         Coord: [{box.bbox.map((v) => v.toFixed(2)).join(', ')}]
                       </div>
                     </div>

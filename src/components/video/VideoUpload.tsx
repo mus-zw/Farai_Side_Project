@@ -250,7 +250,7 @@ export default function VideoUpload({
                 onChange={(e) => setFrameStride(parseInt(e.target.value, 10))}
                 className="w-full accent-[#32FF00] cursor-pointer"
               />
-              <p className="text-[11px] text-neutral-500">
+              <p className="text-[11px] text-neutral-400">
                 Analyses every {frameStride === 1 ? '' : `${frameStride}th `}frame
                 {selectedVideo.meta.durationSeconds > 0 &&
                   ` (about ${Math.max(1, Math.round((selectedVideo.meta.durationSeconds * 30) / frameStride))} frames at 30 fps)`}
@@ -276,7 +276,7 @@ export default function VideoUpload({
                 onChange={(e) => setConfidenceThreshold(parseFloat(e.target.value))}
                 className="w-full accent-[#32FF00] cursor-pointer"
               />
-              <p className="text-[11px] text-neutral-500">
+              <p className="text-[11px] text-neutral-400">
                 Detections below this confidence are discarded by the backend.
               </p>
             </div>
@@ -293,7 +293,7 @@ export default function VideoUpload({
             />
             <span className="space-y-0.5">
               <span className="block font-semibold text-neutral-200">Clean up busy scenes</span>
-              <span className="block text-[11px] leading-relaxed text-neutral-500">
+              <span className="block text-[11px] leading-relaxed text-neutral-400">
                 Drops objects that are never confidently detected and one-frame flicker, but keeps the
                 weaker frames of objects that are, so real boxes don&apos;t blink. Tiny or weak boxes
                 also get no label. Turn off to see every raw detection.

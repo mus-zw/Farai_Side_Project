@@ -138,7 +138,7 @@ export default function Analytics({ galleryItems, onNotify }: AnalyticsProps) {
           <span className="font-mono text-3xl font-extrabold text-white tabular-nums">
             {totalAnalyzed}
           </span>
-          <p className="text-[11px] text-neutral-500">Across local and benchmark test frames</p>
+          <p className="text-[11px] text-neutral-400">Across local and benchmark test frames</p>
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 space-y-2">
@@ -149,7 +149,7 @@ export default function Analytics({ galleryItems, onNotify }: AnalyticsProps) {
           <span className="font-mono text-3xl font-extrabold text-[#32FF00] tabular-nums">
             {avgLatency} <span className="text-sm font-normal text-neutral-400">ms</span>
           </span>
-          <p className="text-[11px] text-neutral-500">Real-time edge forward pass timing</p>
+          <p className="text-[11px] text-neutral-400">Real-time edge forward pass timing</p>
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 space-y-2">
@@ -160,7 +160,7 @@ export default function Analytics({ galleryItems, onNotify }: AnalyticsProps) {
           <span className="font-mono text-3xl font-extrabold text-white tabular-nums">
             {totalObjectsDetected}
           </span>
-          <p className="text-[11px] text-neutral-500">Across all evaluated frames</p>
+          <p className="text-[11px] text-neutral-400">Across all evaluated frames</p>
         </div>
 
         <div className="rounded-xl border border-neutral-800 bg-neutral-900/50 p-5 space-y-2">
@@ -171,7 +171,7 @@ export default function Analytics({ galleryItems, onNotify }: AnalyticsProps) {
           <span className="font-mono text-3xl font-extrabold text-white tabular-nums">
             {Object.keys(classCounts).length}
           </span>
-          <p className="text-[11px] text-neutral-500">From COCO and custom aerial taxonomy</p>
+          <p className="text-[11px] text-neutral-400">From COCO and custom aerial taxonomy</p>
         </div>
       </div>
 
@@ -186,11 +186,11 @@ export default function Analytics({ galleryItems, onNotify }: AnalyticsProps) {
               Distribution of target classifications across scanned sessions
             </p>
           </div>
-          <span className="font-mono text-xs text-neutral-500">Ranked by count</span>
+          <span className="font-mono text-xs text-neutral-400">Ranked by count</span>
         </div>
 
         {sortedClasses.length === 0 ? (
-          <p className="text-xs text-neutral-500 py-6 text-center">
+          <p className="text-xs text-neutral-400 py-6 text-center">
             No detection data recorded yet. Run a scan or sample test to populate analytics.
           </p>
         ) : (

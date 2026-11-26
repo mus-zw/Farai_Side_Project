@@ -118,7 +118,7 @@ export default function Footer() {
         <div className="mt-10 border-t border-[#16213E] pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-[#888888] gap-4">
           <p>
             © {new Date().getFullYear()} Farai Bodias Musariri. Built with React & Tailwind CSS.{' '}
-            <Link to="/privacy" className="underline-offset-2 hover:text-[#32FF00] hover:underline" data-testid="footer-privacy">
+            <Link to="/privacy" className="inline-flex min-h-[24px] items-center underline-offset-2 hover:text-[#32FF00] hover:underline" data-testid="footer-privacy">
               Privacy
             </Link>
           </p>

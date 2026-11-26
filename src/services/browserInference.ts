@@ -389,6 +389,10 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export type BrowserDetectionResult = DetectionResponse & {
   inference_engine: BrowserBackend;
+  /** The model file and size that actually ran (differs from the one picked after a fallback). */
+  model_config: BrowserModelConfig;
+  /** Why this is not the model or backend that was asked for, when it is not. */
+  fallback_reason?: string;
   metadata?: ImageMetadata;
   /** The model's class names, index = class id (needed to export YOLO labels). */
   class_names: string[];
@@ -460,6 +464,8 @@ export function detectInBrowser(
         supports_segmentation: false,
         nms_free: false,
         inference_engine: model.backend,
+        model_config: model.config,
+        fallback_reason: model.fallbackReason,
         metadata: meta,
         class_names: [...run.classNames],
         raw_detections: dets,

@@ -92,7 +92,7 @@ export default function ComparisonMetrics({ comparison }: ComparisonMetricsProps
           <h4 className="text-xs font-semibold uppercase tracking-wider text-neutral-300">
             Class-by-Class Detection Counts
           </h4>
-          <span className="text-[11px] text-neutral-500 font-mono">
+          <span className="text-[11px] text-neutral-400 font-mono">
             {summary.classes.length} classes detected · threshold {formatConfidencePercent(comparison.confidence_threshold)}
           </span>
         </div>
@@ -129,7 +129,7 @@ export default function ComparisonMetrics({ comparison }: ComparisonMetricsProps
                     ))}
                     <td className="py-2.5 text-right tabular-nums">
                       {spread === 0 ? (
-                        <span className="text-neutral-500">Same count</span>
+                        <span className="text-neutral-400">Same count</span>
                       ) : (
                         <span className="text-[#32FF00] font-bold">±{spread}</span>
                       )}
