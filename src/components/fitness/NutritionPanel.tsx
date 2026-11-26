@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { Meal, Targets, dateLabel, kcalFromMacros, mealTotals, newId, num, progress, shiftDate, toISODate } from '../../utils/fitness';
 import { db } from '../../utils/fitnessDb';
@@ -39,15 +39,18 @@ function Bar({ label, value, target, unit, testId }: { label: string; value: num
 export default function NutritionPanel({ date, onDate, meals, targets, onTargets }: Props) {
   const [f, setF] = useState({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
   const [editing, setEditing] = useState(false);
-  /** The meal being edited (its id), or null when adding a new one. */
-  const [editId, setEditId] = useState<string | null>(null);
+  /** The meal being edited (the whole record, so its id and date survive a change of day), or null when adding. */
+  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const busy = useRef(false); // set synchronously, so two taps in the same tick cannot both get through
   const totals = mealTotals(meals);
   const today = toISODate();
   const set = (k: keyof typeof f, v: string, max = 5) => setF((x) => ({ ...x, [k]: k === 'name' ? v.slice(0, 60) : v.replace(/\D/g, '').slice(0, max) }));
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (busy.current) return; // a double tap must not add the meal twice
     const protein = num(f.protein);
     const carbs = num(f.carbs);
     const fat = num(f.fat);
@@ -58,24 +61,31 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
       return;
     }
     setError('');
-    const existing = editId ? meals.find((m) => m.id === editId) : undefined;
+    // Editing keeps the original id and date, so the put replaces that record instead of inserting a new one.
+    const existing = editingMeal;
+    busy.current = true;
+    setSaving(true);
     try {
       await db.meals.put({ id: existing?.id ?? newId(), date: existing?.date ?? date, name: f.name.trim() || existing?.name || `Meal ${meals.length + 1}`, kcal, protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat) });
     } catch {
       setError('Could not save to this browser (storage may be full or blocked). Try again.');
+      busy.current = false;
+      setSaving(false);
       return;
     }
+    busy.current = false;
+    setSaving(false);
     setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
-    setEditId(null);
+    setEditingMeal(null);
   };
 
   const startEdit = (m: Meal) => {
-    setEditId(m.id);
+    setEditingMeal(m);
     setError('');
     setF({ name: m.name, kcal: String(m.kcal), protein: String(m.protein), carbs: String(m.carbs), fat: String(m.fat) });
   };
   const cancelEdit = () => {
-    setEditId(null);
+    setEditingMeal(null);
     setError('');
     setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
   };
@@ -90,13 +100,19 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="f-h">Nutrition</h2>
         <div className="flex items-center gap-1 text-xs">
-          <button type="button" aria-label="Previous day" className="f-btn" style={{ minHeight: 32, padding: '0 8px' }} onClick={() => onDate(shiftDate(date, -1))}>
+          <button type="button" aria-label="Previous day" className="f-btn" style={{ minHeight: 32, padding: '0 8px' }} onClick={() => {
+              cancelEdit();
+              onDate(shiftDate(date, -1));
+            }}>
             <ChevronLeft className="h-4 w-4" />
           </button>
           <span className="min-w-[110px] text-center" data-testid="nutrition-date">
             {date === today ? 'Today' : dateLabel(date)}
           </span>
-          <button type="button" aria-label="Next day" className="f-btn" style={{ minHeight: 32, padding: '0 8px' }} disabled={date >= today} onClick={() => onDate(shiftDate(date, 1))}>
+          <button type="button" aria-label="Next day" className="f-btn" style={{ minHeight: 32, padding: '0 8px' }} disabled={date >= today} onClick={() => {
+              cancelEdit();
+              onDate(shiftDate(date, 1));
+            }}>
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
@@ -153,7 +169,7 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
                 data-testid="meal-delete"
                 className="flex h-9 w-9 items-center justify-center hover:text-white"
                 onClick={() => {
-                  if (editId === m.id) cancelEdit();
+                  if (editingMeal?.id === m.id) cancelEdit();
                   void db.meals.delete(m.id);
                 }}
               >
@@ -171,11 +187,11 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
           <input className="f-input f-center" inputMode="numeric" value={f.protein} onChange={(e) => set('protein', e.target.value, 4)} placeholder="P g" aria-label="Protein in grams" data-testid="meal-protein" />
           <input className="f-input f-center" inputMode="numeric" value={f.carbs} onChange={(e) => set('carbs', e.target.value, 4)} placeholder="C g" aria-label="Carbs in grams" data-testid="meal-carbs" />
           <input className="f-input f-center" inputMode="numeric" value={f.fat} onChange={(e) => set('fat', e.target.value, 4)} placeholder="F g" aria-label="Fat in grams" data-testid="meal-fat" />
-          <button type="submit" data-testid="add-meal" className="f-btn-primary">
-            {editId ? 'Save' : 'Add'}
+          <button type="submit" data-testid="add-meal" className="f-btn-primary" disabled={saving}>
+            {editingMeal ? 'Save' : 'Add'}
           </button>
         </div>
-        {editId && (
+        {editingMeal && (
           <button type="button" className="f-btn" data-testid="meal-cancel-edit" onClick={cancelEdit}>
             Cancel editing
           </button>
