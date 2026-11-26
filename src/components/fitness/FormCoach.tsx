@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PoseLandmarker } from '@mediapipe/tasks-vision';
 import { AlertTriangle, Camera, Film, Square, Download, RotateCcw } from 'lucide-react';
-import { EXERCISES, CoachExercise, FormTracker, FrameMetrics, Landmark, PoseSmoother, RepResult, frameMetrics } from '../../utils/poseMath';
+import { EXERCISES, CoachExercise, FormSetSummary, FormTracker, FrameMetrics, Landmark, LumaSample, PoseSmoother, RepResult, TrackerDebug, frameMetrics, lightingHint, summarizeSet, visibilityHint, weakJoints } from '../../utils/poseMath';
+import { clearFormSets, deleteFormSet, getFormSets, saveFormSet, useLive, type StoredFormSet } from '../../utils/fitnessDb';
 import { downloadTextFile } from '../../utils/yoloLabels';
 import { MEDIAPIPE_WASM_BASE_URL, poseModelUrl } from '../../utils/modelUrls';
 import { useConsent } from '../ConsentProvider';
@@ -59,6 +60,44 @@ function cameraErrorMessage(err: any): string {
   }
 }
 
+const NO_SETS: StoredFormSet[] = [];
+const sec = (ms: number) => (ms / 1000).toFixed(1);
+
+/**
+ * Average brightness of a 16x9 downsample of the current frame (everything, the middle, the border). It is
+ * read once and thrown away: the pixels are never kept, shown or sent anywhere, and are only used to warn
+ * about a dark room or a bright window behind you.
+ */
+function sampleLuma(video: HTMLVideoElement, canvasRef: { current: HTMLCanvasElement | null }): LumaSample {
+  const W = 16;
+  const H = 9;
+  const c = (canvasRef.current ??= Object.assign(document.createElement('canvas'), { width: W, height: H }));
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return { mean: 128, center: 128, edge: 128 };
+  ctx.drawImage(video, 0, 0, W, H);
+  const d = ctx.getImageData(0, 0, W, H).data;
+  let all = 0;
+  let mid = 0;
+  let border = 0;
+  let nMid = 0;
+  let nBorder = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const l = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      all += l;
+      const inMid = x >= 5 && x < 11 && y >= 2 && y < 7;
+      if (inMid) {
+        mid += l;
+        nMid += 1;
+      } else if (x < 3 || x >= W - 3) {
+        border += l;
+        nBorder += 1;
+      }
+    }
+  }
+  return { mean: all / (W * H), center: mid / nMid, edge: border / nBorder };
+}
 const QUALITY_COLOR = { good: 'var(--f-good)', ok: 'var(--f-gold)', poor: 'var(--f-bad)' } as const;
 
 export default function FormCoach() {
@@ -80,6 +119,14 @@ export default function FormCoach() {
   const lastStatRef = useRef(0);
   const procTimesRef = useRef<number[]>([]);
   const lastMetricsRef = useRef<FrameMetrics | null>(null);
+  // Every rep of the set in progress (the screen keeps only the latest), and when the set began.
+  const allRepsRef = useRef<RepResult[]>([]);
+  const setStartRef = useRef(0);
+  const debugOnRef = useRef(false);
+  const lastHintRef = useRef(0);
+  const lightCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lightNoteRef = useRef<string | null>(null);
+  const lastLightRef = useRef(0);
 
   const [exercise, setExercise] = useState<CoachExercise>('squat');
   const [variant, setVariant] = useState<Variant>('full');
@@ -90,6 +137,11 @@ export default function FormCoach() {
   const [source, setSource] = useState<'camera' | 'file' | null>(null);
   const [reps, setReps] = useState<RepResult[]>([]);
   const [live, setLive] = useState({ angle: 0, fps: 0, person: false, delegate: '' });
+  const [hint, setHint] = useState<string | null>(null);
+  const [debugOn, setDebugOn] = useState(false);
+  const [dbg, setDbg] = useState<TrackerDebug | null>(null);
+  const [summary, setSummary] = useState<{ data: FormSetSummary; id?: string; saveFailed?: boolean } | null>(null);
+  const history = useLive(getFormSets, [], NO_SETS);
 
   const exerciseRef = useRef(exercise);
   const variantRef = useRef(variant);
@@ -97,6 +149,7 @@ export default function FormCoach() {
   exerciseRef.current = exercise;
   variantRef.current = variant;
   fpsRef.current = targetFps;
+  debugOnRef.current = debugOn;
 
   // --- Drawing -------------------------------------------------------------------------
 
@@ -161,6 +214,19 @@ export default function FormCoach() {
   // --- Lifecycle -----------------------------------------------------------------------
 
   const stop = useCallback(() => {
+    // The set that just ended: summarise it and keep the summary on this device (numbers only).
+    const done = allRepsRef.current;
+    allRepsRef.current = [];
+    if (runningRef.current && done.length > 0) {
+      const data = summarizeSet(exerciseRef.current, done, performance.now() - setStartRef.current, Date.now());
+      if (data) {
+        setSummary({ data });
+        saveFormSet(data).then(
+          (id) => setSummary((s) => (s && s.data === data ? { ...s, id } : s)),
+          () => setSummary((s) => (s && s.data === data ? { ...s, saveFailed: true } : s))
+        );
+      }
+    }
     runningRef.current = false;
     if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
@@ -185,6 +251,7 @@ export default function FormCoach() {
     setStatus('idle');
     setSource(null);
     setLive((l) => ({ ...l, person: false, fps: 0 }));
+    setHint(null);
   }, [clearOverlay]);
 
   // Leaving the page must release the camera and the model.
@@ -207,6 +274,7 @@ export default function FormCoach() {
   useEffect(() => {
     trackerRef.current = new FormTracker(EXERCISES[exercise]);
     smootherRef.current.reset();
+    allRepsRef.current = [];
     setReps([]);
     clearOverlay();
   }, [exercise, clearOverlay]);
@@ -251,6 +319,10 @@ export default function FormCoach() {
     rafRef.current = requestAnimationFrame(loop);
     const video = videoRef.current;
     const lmk = landmarkerRef.current;
+    if (video && video.ended && fileUrlRef.current) {
+      stop(); // an analysed video reached its end: that is the end of the set
+      return;
+    }
     if (!video || !lmk || video.readyState < 2 || video.paused || video.ended) return;
 
     const now = performance.now();
@@ -274,6 +346,7 @@ export default function FormCoach() {
     if (!raw) {
       clearOverlay();
       lastMetricsRef.current = null;
+      trackerRef.current.lost(now, 'no person in view');
       if (now - lastStatRef.current > 300) {
         lastStatRef.current = now;
         setLive((l) => ({ ...l, person: false, fps: procTimesRef.current.length }));
@@ -285,8 +358,23 @@ export default function FormCoach() {
     const m = frameMetrics(smooth, video.videoWidth, video.videoHeight, exerciseRef.current);
     lastMetricsRef.current = m;
     const rep = m ? trackerRef.current.update(m, now) : null;
-    if (rep) setReps((r) => [...r.slice(-19), rep]);
+    if (!m) trackerRef.current.lost(now, 'pose incomplete');
+    if (rep) {
+      allRepsRef.current.push(rep);
+      setReps((r) => [...r.slice(-19), rep]);
+    }
     draw(smooth, m);
+
+    // Set-up advice, a couple of times a second: hidden joints first, then the light.
+    if (now - lastHintRef.current > 600) {
+      lastHintRef.current = now;
+      if (now - lastLightRef.current > 1500) {
+        lastLightRef.current = now;
+        lightNoteRef.current = lightingHint(sampleLuma(video, lightCanvasRef));
+      }
+      setHint(visibilityHint(weakJoints(smooth, exerciseRef.current)) ?? lightNoteRef.current);
+    }
+    if (debugOnRef.current && now - lastStatRef.current > 150) setDbg(trackerRef.current.debug());
 
     if (now - lastStatRef.current > 200) {
       lastStatRef.current = now;
@@ -335,6 +423,10 @@ export default function FormCoach() {
 
       trackerRef.current = new FormTracker(EXERCISES[exerciseRef.current]);
       smootherRef.current.reset();
+      allRepsRef.current = [];
+      setStartRef.current = performance.now();
+      setSummary(null);
+      setHint(null);
       setReps([]);
       procTimesRef.current = [];
       lastProcRef.current = 0;
@@ -488,13 +580,28 @@ export default function FormCoach() {
             disabled={reps.length === 0}
             onClick={() => {
               trackerRef.current.reset();
+              allRepsRef.current = [];
               setReps([]);
             }}
           >
             <RotateCcw className="h-4 w-4" /> Reset reps
           </button>
+          <button type="button" className="f-chip" style={{ minHeight: 40 }} aria-pressed={debugOn} data-testid="coach-debug-toggle" onClick={() => setDebugOn((v) => !v)}>
+            Debug
+          </button>
         </div>
-        <p className="f-small">{spec.tip}</p>
+        <div className="space-y-1" data-testid="coach-guide">
+          <div className="f-small font-semibold" style={{ color: 'var(--f-text)' }}>
+            Set up the shot
+          </div>
+          <ul className="list-disc space-y-0.5 pl-5 f-small">
+            {spec.framing.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+            <li>Light the room from the front or the side, and keep bright windows out of the background.</li>
+            <li>Fitted clothes and a clear floor help it find your joints. It measures angles from one 2D view, so a side-on camera is the most accurate.</li>
+          </ul>
+        </div>
       </section>
 
       {error && (
@@ -547,7 +654,7 @@ export default function FormCoach() {
           <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full object-contain" data-testid="coach-video" />
           <canvas ref={overlayRef} className="pointer-events-none absolute inset-0 h-full w-full object-contain" data-testid="coach-overlay" />
           {!running && (
-            <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm f-muted">
+            <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm" style={{ color: '#c9d1db' }}>
               {status === 'starting' ? 'Loading the pose model…' : 'Start the camera or pick a video to begin.'}
             </div>
           )}
@@ -571,8 +678,122 @@ export default function FormCoach() {
           </div>
         </div>
         {running && !live.person && <p className="f-small" data-testid="coach-no-person">No person detected. Step back so your whole body is in frame.</p>}
+        {running && live.person && hint && (
+          <p role="status" className="text-xs font-semibold" style={{ color: 'var(--f-gold)' }} data-testid="coach-hint">
+            {hint}
+          </p>
+        )}
+        {debugOn && (
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border p-3 font-mono text-[11px]" style={{ borderColor: 'var(--f-border)', background: 'var(--f-surface-2)' }} data-testid="coach-debug">
+            {running && dbg ? (
+              <>
+                <dt className="f-muted">Phase</dt>
+                <dd data-testid="dbg-phase">{dbg.phase}</dd>
+                <dt className="f-muted">Angle (smoothed / raw)</dt>
+                <dd>
+                  {Math.round(dbg.angle)}° / {Math.round(dbg.rawAngle)}°
+                </dd>
+                <dt className="f-muted">Weakest joint visibility</dt>
+                <dd>{dbg.jointVisibility.toFixed(2)}</dd>
+                <dt className="f-muted">Standing / starts below</dt>
+                <dd>
+                  {Math.round(dbg.standing)}° / {Math.round(dbg.startsBelow)}°
+                </dd>
+                <dt className="f-muted">Depth at / finishes at</dt>
+                <dd>
+                  {Math.round(dbg.depthAt)}° / {Math.round(dbg.finishesAt)}°
+                </dd>
+                <dt className="f-muted">Reps / partials</dt>
+                <dd>
+                  {dbg.reps} / {dbg.partials}
+                </dd>
+                <dt className="f-muted">Last event</dt>
+                <dd>{dbg.lastEvent}</dd>
+                <dt className="f-muted">Last ignored</dt>
+                <dd data-testid="dbg-reject">{dbg.lastReject ?? 'none'}</dd>
+              </>
+            ) : (
+              <dd className="col-span-2 f-muted">Start the coach to see what the counter is doing, frame by frame.</dd>
+            )}
+          </dl>
+        )}
         {source === 'file' && <p className="f-small">Playing a file: pause it to inspect a frame, then take a snapshot.</p>}
       </section>
+
+      {summary && (
+        <section className="f-card space-y-3" data-testid="coach-summary" aria-label="Set summary">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="f-h">Set summary · {EXERCISES[summary.data.exercise].label}</h3>
+            <span className="f-small">{sec(summary.data.durationMs)} s</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+            {(
+              [
+                ['Reps', String(summary.data.reps), 'summary-reps'],
+                ['Partials', String(summary.data.partials), 'summary-partials'],
+                [`Depth (${EXERCISES[summary.data.exercise].angleName})`, summary.data.reps ? `${summary.data.avgDepth}°` : '–', 'summary-depth'],
+                ['Tempo down / pause / up', summary.data.reps ? `${sec(summary.data.avgDownMs)} / ${sec(summary.data.avgPauseMs)} / ${sec(summary.data.avgUpMs)} s` : '–', 'summary-tempo'],
+              ] as const
+            ).map(([label, value, id]) => (
+              <div key={id} className="rounded-xl border p-2" style={{ borderColor: 'var(--f-border)', background: 'var(--f-surface-2)' }}>
+                <div className="f-small">{label}</div>
+                <div className="text-lg font-extrabold tabular-nums" data-testid={id}>
+                  {value}
+                </div>
+              </div>
+            ))}
+          </div>
+          <ul className="space-y-1 text-xs" data-testid="summary-cues">
+            {summary.data.cues.map((c) => (
+              <li key={c}>• {c}</li>
+            ))}
+          </ul>
+          <p className="f-small" data-testid="summary-saved">
+            {summary.saveFailed ? 'Could not save this summary (storage may be full or blocked).' : summary.id ? 'Saved on this device only.' : 'Saving…'}{' '}
+            {summary.id && (
+              <button
+                type="button"
+                className="underline"
+                style={{ minHeight: 32 }}
+                data-testid="summary-delete"
+                onClick={() => {
+                  void deleteFormSet(summary.id!);
+                  setSummary(null);
+                }}
+              >
+                Delete
+              </button>
+            )}
+          </p>
+        </section>
+      )}
+
+      {history.length > 0 && (
+        <section className="f-card space-y-2" data-testid="coach-history">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="f-h">Recent form sets</h3>
+            <button type="button" className="inline-flex min-h-[32px] items-center text-[11px] font-semibold f-accent hover:underline" data-testid="history-clear" onClick={() => void clearFormSets()}>
+              Clear all
+            </button>
+          </div>
+          <ul className="space-y-1.5">
+            {history.slice(0, 5).map((h) => (
+              <li key={h.id} className="flex items-start justify-between gap-2 text-xs" data-testid="history-set">
+                <span className="min-w-0">
+                  <strong>{EXERCISES[h.exercise].label}</strong> · {h.reps} reps{h.partials ? ` · ${h.partials} partial` : ''}
+                  <span className="block f-muted">
+                    {new Date(h.at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                    {h.reps ? ` · depth ${h.avgDepth}° · tempo ${sec(h.avgDownMs)}/${sec(h.avgPauseMs)}/${sec(h.avgUpMs)} s` : ''}
+                  </span>
+                </span>
+                <button type="button" aria-label={`Delete this ${EXERCISES[h.exercise].label} set`} className="inline-flex min-h-[32px] shrink-0 items-center px-1 f-muted hover:text-white" onClick={() => void deleteFormSet(h.id)}>
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="f-card space-y-2" data-testid="coach-feedback">
         <div className="flex items-center justify-between">

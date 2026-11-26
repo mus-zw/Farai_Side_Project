@@ -45,6 +45,7 @@ import {
   toISODate,
 } from './fitness';
 import { estimate1RM, parseCSV, toCSV } from './fitnessMath';
+import { cleanFormSet, type FormSetSummary } from './poseMath';
 
 interface KV {
   key: string;
@@ -207,7 +208,7 @@ export async function continueAsGuest(): Promise<void> {
  */
 export async function startFresh(): Promise<void> {
   await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
-    await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.delete('draft')]);
+    await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.delete('draft'), db.kv.delete(FORMSETS_KEY)]);
     await db.kv.put({ key: 'seeded', value: false });
     const a = cleanAthlete((await db.kv.get('athlete'))?.value);
     if (a?.mode === 'guest') await db.kv.put({ key: 'athlete', value: { ...a, name: 'Athlete', mode: 'athlete' } satisfies Athlete });
@@ -625,3 +626,55 @@ export function useLive<T>(querier: () => Promise<T> | T, deps: readonly unknown
 }
 
 export { DAY_TYPES };
+
+// --- Form Coach set summaries ----------------------------------------------------------------------------
+
+/**
+ * What the Form Coach keeps after a set: counts, depth and tempo, a few cues. Kept in the local key-value
+ * store under a key that is not one of the synced preferences, so it stays on this device and is never
+ * sent to the cloud. It holds no image, landmark or angle series, only the summary numbers.
+ */
+const FORMSETS_KEY = 'formsets';
+const MAX_FORMSETS = 100;
+
+export interface StoredFormSet extends FormSetSummary {
+  id: string;
+}
+
+const readFormSets = async (): Promise<StoredFormSet[]> => {
+  const raw = (await db.kv.get(FORMSETS_KEY))?.value;
+  if (!Array.isArray(raw)) return [];
+  const out: StoredFormSet[] = [];
+  for (const r of raw) {
+    const clean = cleanFormSet(r);
+    const id = r && typeof r === 'object' && typeof (r as { id?: unknown }).id === 'string' ? (r as { id: string }).id.slice(0, 40) : null;
+    if (clean && id) out.push({ ...clean, id });
+  }
+  return out;
+};
+
+/** Saved sets, newest first. */
+export async function getFormSets(): Promise<StoredFormSet[]> {
+  return (await readFormSets()).sort((a, b) => b.at - a.at);
+}
+
+/** Keep a set (the newest 100 are kept) and return its id. */
+export async function saveFormSet(summary: FormSetSummary): Promise<string> {
+  const id = newId();
+  await db.transaction('rw', db.kv, async () => {
+    const all = await readFormSets();
+    const next = [...all, { ...summary, id }].sort((a, b) => a.at - b.at).slice(-MAX_FORMSETS);
+    await db.kv.put({ key: FORMSETS_KEY, value: next });
+  });
+  return id;
+}
+
+export async function deleteFormSet(id: string): Promise<void> {
+  await db.transaction('rw', db.kv, async () => {
+    await db.kv.put({ key: FORMSETS_KEY, value: (await readFormSets()).filter((s) => s.id !== id) });
+  });
+}
+
+export async function clearFormSets(): Promise<void> {
+  await db.kv.delete(FORMSETS_KEY);
+}

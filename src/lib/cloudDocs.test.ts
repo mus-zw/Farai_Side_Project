@@ -6,7 +6,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CLOUD_SCHEMA, findForbidden, fromCloudDoc, toCloudDoc } from './cloudDocs';
+import { CLOUD_SCHEMA, PREF_IDS, findForbidden, fromCloudDoc, toCloudDoc } from './cloudDocs';
 
 const meal = { id: 'm1', date: '2026-11-26', name: 'Lunch', kcal: 500, protein: 30, carbs: 50, fat: 15 };
 const session = {
@@ -114,4 +114,11 @@ test('over-long ids are refused on the way in', () => {
   const c = toCloudDoc('meals', meal);
   assert.ok(c.ok);
   if (c.ok) assert.equal(fromCloudDoc('meals', 'x'.repeat(121), c.data), null);
+});
+
+test('only the known preferences are synced: Form Coach summaries stay on the device', () => {
+  assert.deepEqual([...PREF_IDS], ['settings', 'cues', 'athlete']);
+  assert.equal(PREF_IDS.includes('formsets' as never), false);
+  // And a summary that did try to go up would not fit any cloud document shape.
+  assert.equal(fromCloudDoc('prefs', 'formsets', { exercise: 'squat', reps: 5 }), null);
 });
