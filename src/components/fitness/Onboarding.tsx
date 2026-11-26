@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import AuthPanel from './AuthPanel';
+import { useFitnessAuth } from './FitnessAuthProvider';
 import SiteLink from '../SiteLink';
 import EngineeredBy from '../EngineeredBy';
 import { isStandalone, linkTo } from '../../utils/site';
@@ -15,6 +18,8 @@ import { useProfile } from '../ProfileProvider';
  */
 export default function Onboarding() {
   const navigate = useNavigate();
+  const fa = useFitnessAuth();
+  const signedIn = fa.status === 'signedIn';
   const { profile } = useProfile(); // the portfolio's local name, if the visitor already set one
   const [name, setName] = useState(profile.signedIn ? profile.name.slice(0, MAX_ATHLETE_NAME) : '');
   const [schedule, setSchedule] = useState<Schedule>('ppl6');
@@ -24,6 +29,11 @@ export default function Onboarding() {
   const [meals, setMeals] = useState('4');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  // A name from the account (or Google) saves typing it again.
+  useEffect(() => {
+    if (fa.user?.displayName) setName((n) => n || fa.user!.displayName!.slice(0, MAX_ATHLETE_NAME));
+  }, [fa.user]);
 
   const t = deriveTargets(num(kcal), num(protein), num(meals) || 4);
   const nameOk = cleanAthleteName(name) !== null;
@@ -80,6 +90,29 @@ export default function Onboarding() {
         </h1>
         <p className="f-small">Takes a minute, stays on this device. Change any of it later in Profile.</p>
       </div>
+
+      {fa.status !== 'disabled' && (
+        <section className="f-card space-y-3" data-testid="onboarding-account">
+          {signedIn ? (
+            <>
+              <h2 className="f-h">Signed in</h2>
+              <p className="f-small" data-testid="onboarding-signed-in">
+                {fa.user?.email ?? fa.user?.displayName}.{' '}
+                {fa.sync.phase === 'syncing' ? 'Loading your account data…' : 'Finish your profile below and it syncs to your account.'}
+              </p>
+              <button type="button" className="text-[11px] font-semibold f-accent hover:underline" onClick={() => void fa.signOut()}>
+                Not you? Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <h2 className="f-h">Sign in or create an account</h2>
+              <p className="f-small">Optional: sync across your devices. Or skip this and set up on this device only, below.</p>
+              <AuthPanel />
+            </>
+          )}
+        </section>
+      )}
 
       <form onSubmit={create} className="f-card space-y-5" data-testid="onboarding-form">
         <label className="block space-y-1.5">
@@ -159,6 +192,7 @@ export default function Onboarding() {
         </button>
       </form>
 
+      {!signedIn && (
       <div className="space-y-2 text-center">
         <p className="f-small">Just looking around?</p>
         <button type="button" className="f-btn w-full" style={{ minHeight: 48 }} disabled={busy} data-testid="onboarding-guest" onClick={() => void guest()}>
@@ -166,6 +200,7 @@ export default function Onboarding() {
         </button>
         <p className="f-small">Fills the app with made-up history so you can try every screen. You can start fresh any time.</p>
       </div>
+      )}
       <EngineeredBy className="text-center f-muted" />
     </div>
   );

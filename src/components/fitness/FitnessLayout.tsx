@@ -1,6 +1,7 @@
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
 import { Home, Dumbbell, Utensils, LineChart, ScanLine, UserRound } from 'lucide-react';
 import { FitnessProvider, useFitness } from './FitnessProvider';
+import { FitnessAuthProvider, useFitnessAuth } from './FitnessAuthProvider';
 import RestTimerBar from './RestTimerBar';
 import Onboarding from './Onboarding';
 import SiteLink from '../SiteLink';
@@ -29,6 +30,7 @@ function AppBar() {
   const { athlete } = useFitness();
   const { pathname } = useLocation();
   const pro = fitnessStatus(useEntitlements()).active;
+  const { status: authStatus, sync, user } = useFitnessAuth();
   const title = TITLES[pathname.replace(/\/+$/, '') || '/fitness'] ?? 'Fitness';
   // A standalone fitness site with no hub URL configured has no portfolio to go back to.
   const hub = linkTo('hub');
@@ -55,6 +57,15 @@ function AppBar() {
           </span>
           {athlete.mode === 'guest' ? <span className="f-guesttag">Guest</span> : <span className="f-athlete-name">{athlete.name}</span>}
           {pro && <span className="f-guesttag" style={{ color: 'var(--f-accent)', borderColor: 'var(--f-accent)' }} data-testid="pro-badge">Pro</span>}
+          {authStatus === 'signedIn' && (
+            <span
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ background: sync.phase === 'error' ? 'var(--f-bad)' : sync.phase === 'syncing' ? 'var(--f-gold)' : 'var(--f-good)' }}
+              title={`Cloud sync: ${user?.email ?? 'signed in'} (${sync.phase})`}
+              data-testid="sync-dot"
+              data-phase={sync.phase}
+            />
+          )}
         </Link>
       ) : (
         <span />
@@ -118,7 +129,9 @@ export default function FitnessLayout({ onNotify }: { onNotify: (type: 'success'
   return (
     <div data-theme="fitness">
       <FitnessProvider notify={onNotify}>
-        <Shell />
+        <FitnessAuthProvider>
+          <Shell />
+        </FitnessAuthProvider>
       </FitnessProvider>
     </div>
   );

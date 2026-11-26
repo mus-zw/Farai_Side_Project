@@ -14,6 +14,8 @@ import { renameAthlete, resetEverything, seedSampleData, startFresh } from '../.
 import { useFitness } from '../../components/fitness/FitnessProvider';
 import { useProfile } from '../../components/ProfileProvider';
 import BackupPanel from '../../components/fitness/BackupPanel';
+import AuthPanel from '../../components/fitness/AuthPanel';
+import { useFitnessAuth } from '../../components/fitness/FitnessAuthProvider';
 
 const REST_PRESETS = [60, 90, 120, 180];
 
@@ -22,6 +24,8 @@ export default function ProfilePage() {
   const { openProfile } = useProfile();
   const { openFitnessPro } = useUnlockUi();
   const { record, revoke } = useConsent();
+  const fa = useFitnessAuth();
+  const signedIn = fa.status === 'signedIn';
   const plan = fitnessStatus(useEntitlements());
   const [name, setName] = useState(athlete?.name ?? '');
   useEffect(() => setName(athlete?.name ?? ''), [athlete?.name]);
@@ -66,6 +70,83 @@ export default function ProfilePage() {
             Save
           </button>
         </form>
+      </section>
+
+      <section className="f-card space-y-3" data-testid="account-card">
+        <h2 className="f-h">Account &amp; sync</h2>
+        {fa.status === 'disabled' && (
+          <p className="f-small" data-testid="cloud-disabled">
+            Cloud sync is not set up on this build, so your data stays on this device. Everything works the same without an account.
+          </p>
+        )}
+        {fa.status === 'loading' && <p className="f-small">Checking sign-in…</p>}
+        {fa.status === 'signedOut' && (
+          <>
+            <p className="f-small">
+              Create an account to keep your log safe and use it on more than one device.{guest ? ' Signing in replaces the sample data with your own account data.' : ' Data already on this device is combined with your account.'}
+            </p>
+            <AuthPanel />
+          </>
+        )}
+        {signedIn && (
+          <>
+            <p className="text-sm" data-testid="account-email">
+              Signed in as <strong>{fa.user?.email ?? fa.user?.displayName}</strong>
+            </p>
+            <p className="f-small" data-testid="sync-status" data-phase={fa.sync.phase}>
+              {fa.sync.phase === 'error'
+                ? `Sync problem: ${fa.sync.error}`
+                : fa.sync.phase === 'syncing'
+                  ? 'Syncing…'
+                  : fa.sync.queued > 0
+                    ? `${fa.sync.queued} change(s) waiting to sync`
+                    : fa.sync.lastSyncedAt
+                      ? `Up to date · ${new Date(fa.sync.lastSyncedAt).toLocaleTimeString()}`
+                      : 'Up to date'}
+              {typeof navigator !== 'undefined' && !navigator.onLine ? ' · offline: changes sync when you are back online' : ''}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className="f-btn" data-testid="sync-now" onClick={() => void fa.syncNow()}>
+                Sync now
+              </button>
+              <button type="button" className="f-btn" data-testid="sign-out-keep" onClick={() => void fa.signOut()}>
+                Sign out
+              </button>
+              <button
+                type="button"
+                className="f-btn"
+                data-testid="sign-out-wipe"
+                onClick={async () => {
+                  if (window.confirm('Sign out and remove your data from THIS device? Your cloud copy is kept, and signing in again brings it back.')) await fa.signOut({ removeLocal: true });
+                }}
+              >
+                Sign out &amp; clear this device
+              </button>
+              <button
+                type="button"
+                className="f-btn-danger"
+                data-testid="delete-cloud"
+                onClick={async () => {
+                  if (window.confirm('Permanently delete your cloud data AND your account? Your data on this device stays. This cannot be undone.')) {
+                    const ok = await fa.deleteCloudAccount();
+                    if (ok) notify('success', 'Cloud data and account deleted.');
+                  }
+                }}
+              >
+                Delete cloud data &amp; account
+              </button>
+            </div>
+            <p className="f-small">
+              Sign out keeps a copy of your data on this device. If someone else signs in here, that copy is removed first, so on a shared device choose "Sign out &amp; clear this device".
+            </p>
+            {fa.error && (
+              <p role="alert" className="text-xs" style={{ color: 'var(--f-bad)' }} data-testid="account-error">
+                {fa.error}
+              </p>
+            )}
+            {fa.notice && <p role="status" className="text-xs" style={{ color: 'var(--f-good)' }}>{fa.notice}</p>}
+          </>
+        )}
       </section>
 
       <section className="f-card space-y-3" data-testid="plan-card">
@@ -161,7 +242,7 @@ export default function ProfilePage() {
             onClick={async () => {
               const msg = seeded
                 ? 'Remove the sample data and start with an empty log? You will keep your plan and targets.'
-                : 'Clear all your logged sessions, meals and weigh-ins? You keep your profile, plan and targets. Download a backup first if you want a copy.';
+                : `Clear all your logged sessions, meals and weigh-ins? You keep your profile, plan and targets.${signedIn ? ' This also removes them from your cloud account and your other devices.' : ''} Download a backup first if you want a copy.`;
               if (!window.confirm(msg)) return;
               await startFresh();
               notify('success', guest ? 'Sample data removed. You are now a regular athlete profile: rename yourself above.' : 'Your logs were cleared.');
@@ -173,7 +254,7 @@ export default function ProfilePage() {
             <button type="button" className="f-btn" data-testid="reset-sample" onClick={async () => { await seedSampleData(); notify('success', 'Sample data reset.'); }}>
               Reset sample data
             </button>
-          ) : (
+          ) : signedIn ? null : (
             <button
               type="button"
               className="f-btn"
@@ -188,18 +269,22 @@ export default function ProfilePage() {
               Load sample data
             </button>
           )}
+          {!signedIn && (
           <button
-            type="button"
-            className="f-btn-danger"
-            data-testid="reset-everything"
-            onClick={async () => {
-              if (window.confirm('Delete your profile and ALL fitness data from this browser, then go back to setup? This cannot be undone.')) {
-                await resetEverything();
-              }
-            }}
-          >
-            Sign out &amp; restart setup
-          </button>
+              type="button"
+              className="f-btn-danger"
+              data-testid="reset-everything"
+              onClick={async () => {
+                if (signedIn) {
+                  if (window.confirm('Sign out and remove your data from this device? Your cloud copy is kept.')) await fa.signOut({ removeLocal: true });
+                } else if (window.confirm('Delete your profile and ALL fitness data from this browser, then go back to setup? This cannot be undone.')) {
+                  await resetEverything();
+                }
+              }}
+            >
+              {signedIn ? 'Sign out & clear this device' : 'Sign out & restart setup'}
+            </button>
+          )}
         </div>
       </section>
 

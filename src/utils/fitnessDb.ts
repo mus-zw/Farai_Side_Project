@@ -70,6 +70,15 @@ class FitnessDB extends Dexie {
 
 export const db = new FitnessDB();
 
+// Dexie does not fire per-row hooks for Table.clear(), so operations that clear and rewrite many rows
+// announce themselves here. Cloud sync listens and mirrors the result (see lib/fitnessSync.ts).
+const bulkListeners = new Set<() => void>();
+export function onBulkChange(cb: () => void): () => void {
+  bulkListeners.add(cb);
+  return () => bulkListeners.delete(cb);
+}
+const notifyBulkChange = () => bulkListeners.forEach((l) => l());
+
 const LEGACY_KEY = 'farai_fitness_v1';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -202,6 +211,7 @@ export async function startFresh(): Promise<void> {
     const a = cleanAthlete((await db.kv.get('athlete'))?.value);
     if (a?.mode === 'guest') await db.kv.put({ key: 'athlete', value: { ...a, name: 'Athlete', mode: 'athlete' } satisfies Athlete });
   });
+  notifyBulkChange();
 }
 
 /** Remove the profile and all data; the next screen is onboarding again. */
@@ -481,6 +491,7 @@ export async function importBackup(json: unknown): Promise<ImportSummary> {
       { key: 'initialized', value: true },
     ]);
   });
+  notifyBulkChange();
   return { sessions: sessions.length, meals: meals.length, weights: weights.length, skipped };
 }
 

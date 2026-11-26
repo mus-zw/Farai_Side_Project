@@ -47,6 +47,11 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link to="/home#projects" className="text-[#CCCCCC] hover:text-[#32FF00] transition-colors inline-block py-1" data-testid="footer-projects">
+                  Projects (Auto-Labeler &amp; Fitness)
+                </Link>
+              </li>
+              <li>
                 <Link to="/demo" className="text-[#CCCCCC] hover:text-[#32FF00] transition-colors inline-block py-1">
                   Interactive CV Suite
                 </Link>

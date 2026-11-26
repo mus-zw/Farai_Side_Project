@@ -4,6 +4,7 @@ import { useConsent } from '../components/ConsentProvider';
 import { hasConsent } from '../utils/consent';
 import { clearAllLocalData } from '../utils/localData';
 import { CONTACT_EMAIL } from '../utils/site';
+import { cloudConfigured } from '../lib/firebaseConfig';
 import { getApiBaseUrl } from '../services/apiClient';
 
 const H = ({ children }: { children: React.ReactNode }) => <h2 className="mt-8 text-base font-bold text-white">{children}</h2>;
@@ -49,10 +50,24 @@ export default function Privacy() {
         <li>Files such as a snapshot, a label file or a backup are created only when you press the button, and are saved to your own downloads.</li>
       </ul>
 
+      {cloudConfigured && (
+        <>
+          <H>Fitness accounts and cloud sync (optional)</H>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5" data-testid="privacy-cloud">
+            <li>You can use the fitness app without an account. If you create one (email and password, or Google), your fitness data is stored in your own private area of Google Firebase (Firestore), readable and writable only by your account.</li>
+            <li><strong className="text-white">What is synced:</strong> your athlete profile, plan and targets, workouts and sets, meals, weigh-ins and pinned cues. Sign-in itself is handled by Firebase Authentication, which holds your email address (or your Google account name and email).</li>
+            <li><strong className="text-white">Never synced:</strong> camera frames, video, body keypoints or any biometric data, and the made-up sample data. The Form Coach stays entirely on your device whether or not you have an account.</li>
+            <li>This account is separate from the rest of this site: the portfolio and the CV Auto-Labeler do not use it.</li>
+            <li>You can delete your cloud data and account yourself any time in the fitness app, under Profile, Account &amp; sync.</li>
+          </ul>
+        </>
+      )}
+
       <H>What leaves your device</H>
       <ul className="mt-2 list-disc space-y-1.5 pl-5">
         <li>Normal page loads from the host, including the AI model and runtime files (downloads that carry none of your data).</li>
         <li>Fonts from Google Fonts, which means your IP address is visible to Google when a page loads.</li>
+        {cloudConfigured && <li>If you sign in to the fitness app: requests to Google Firebase to sign you in and to read and write your fitness data.</li>}
         <li>If you press a checkout link you go to the payment provider, and if you use a contact or intake form it opens your own email app. This site does not send those messages itself.</li>
       </ul>
 
@@ -73,7 +88,7 @@ export default function Privacy() {
           </button>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span>Delete everything this site stored on this device.</span>
+          <span>Delete everything this site stored on this device (and sign out of the fitness account). Your cloud copy, if you have one, is deleted separately in the fitness Profile.</span>
           <button
             type="button"
             className="min-h-[40px] rounded-lg border border-rose-500/50 px-4 text-xs font-semibold text-rose-300 hover:border-rose-400"
