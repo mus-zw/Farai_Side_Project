@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { GOAL_LABEL, Goal, Meal, Settings, WeightEntry, dateLabel, num, toISODate } from '../../utils/fitness';
 import { adaptiveTarget, linePath, trendSeries, weeklyRate } from '../../utils/fitnessMath';
 import { db, type SettingsPatch } from '../../utils/fitnessDb';
+import { useFitness } from './FitnessProvider';
 
 interface Props {
   weights: WeightEntry[];
@@ -16,6 +17,7 @@ const H = 120;
 
 /** Weigh-ins, the smoothed trend, and a calorie target adjusted to what your weight is actually doing. */
 export default function TrendWeightCard({ weights, byDate, settings, onSettings }: Props) {
+  const { offerUndo } = useFitness();
   const [value, setValue] = useState('');
   const [date, setDate] = useState(toISODate());
   const [error, setError] = useState('');
@@ -102,7 +104,12 @@ export default function TrendWeightCard({ weights, byDate, settings, onSettings 
           {[...weights].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map((w) => (
             <li key={w.date} className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]" style={{ borderColor: 'var(--f-border)' }}>
               {dateLabel(w.date)} · {w.value} {unit}
-              <button type="button" aria-label={`Delete weigh-in ${w.date}`} className="flex h-8 w-8 items-center justify-center f-muted hover:text-white" onClick={() => void db.weights.delete(w.date)}>
+              <button type="button" aria-label={`Delete weigh-in ${w.date}`} className="flex h-8 w-8 items-center justify-center f-muted hover:text-white" onClick={() => {
+                  void db.weights.delete(w.date);
+                  offerUndo(`Removed ${w.value} ${unit} weigh-in`, async () => {
+                    await db.weights.put(w);
+                  });
+                }}>
                 <Trash2 className="h-3 w-3" />
               </button>
             </li>

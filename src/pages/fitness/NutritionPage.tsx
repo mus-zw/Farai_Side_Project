@@ -14,10 +14,20 @@ export default function NutritionPage() {
   const [date, setDate] = useState(toISODate());
   const meals = useLive(() => db.meals.toArray(), [], NO_MEALS);
   const byDate = mealsByDate(meals);
+  // Distinct meals by name, newest first, skipping the auto-names ("Meal 3").
+  const recent: Meal[] = [];
+  const seen = new Set<string>();
+  for (const m of [...meals].sort((a, b) => b.date.localeCompare(a.date))) {
+    const key = m.name.trim().toLowerCase();
+    if (seen.has(key) || /^meal \d+$/.test(key)) continue;
+    seen.add(key);
+    recent.push(m);
+    if (recent.length === 6) break;
+  }
 
   return (
     <div className="space-y-4">
-      <NutritionPanel date={date} onDate={setDate} meals={byDate[date] ?? NO_MEALS} targets={settings.targets} onTargets={(targets) => updateSettings({ targets })} />
+      <NutritionPanel date={date} onDate={setDate} meals={byDate[date] ?? NO_MEALS} targets={settings.targets} onTargets={(targets) => updateSettings({ targets })} recent={recent} />
       <MealFrequencyCard byDate={byDate} targets={settings.targets} />
       <p className="f-small" data-testid="weight-moved">
         Weigh-ins, your weight trend and the adaptive calorie estimate are on the{' '}

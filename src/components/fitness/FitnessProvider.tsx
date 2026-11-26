@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Athlete, DEFAULT_SETTINGS, Settings } from '../../utils/fitness';
 import type { SettingsPatch } from '../../utils/fitnessDb';
 import { getAthlete, getSettings, initFitnessDb, isSeeded, patchSettings, useLive } from '../../utils/fitnessDb';
@@ -25,7 +25,20 @@ interface FitnessContextValue {
   startRest: (seconds: number) => void;
   adjustRest: (deltaSeconds: number) => void;
   skipRest: () => void;
+  /** The last thing that can be undone, for a few seconds (a delete, or a one-tap add). */
+  undo: UndoState | null;
+  /** Offer to take an action back; `restore` reverses it. Replaces any earlier offer. */
+  offerUndo: (label: string, restore: () => Promise<void>) => void;
+  runUndo: () => Promise<void>;
+  dismissUndo: () => void;
 }
+
+export interface UndoState {
+  label: string;
+  restore: () => Promise<void>;
+}
+
+const UNDO_MS = 8000;
 
 const FitnessContext = createContext<FitnessContextValue | null>(null);
 
@@ -72,9 +85,30 @@ export function FitnessProvider({ children, notify }: { children: ReactNode; not
   }, []);
   const skipRest = useCallback(() => setRest({ endsAt: null, total: 0 }), []);
 
+  const [undo, setUndo] = useState<UndoState | null>(null);
+  const undoTimer = useRef<number | null>(null);
+  const dismissUndo = useCallback(() => {
+    if (undoTimer.current !== null) window.clearTimeout(undoTimer.current);
+    undoTimer.current = null;
+    setUndo(null);
+  }, []);
+  const offerUndo = useCallback((label: string, restore: () => Promise<void>) => {
+    if (undoTimer.current !== null) window.clearTimeout(undoTimer.current);
+    setUndo({ label, restore });
+    undoTimer.current = window.setTimeout(() => setUndo(null), UNDO_MS);
+  }, []);
+  const runUndo = useCallback(async () => {
+    const u = undo;
+    dismissUndo();
+    if (u) await u.restore().catch(() => undefined);
+  }, [undo, dismissUndo]);
+  useEffect(() => () => {
+    if (undoTimer.current !== null) window.clearTimeout(undoTimer.current);
+  }, []);
+
   const value = useMemo(
-    () => ({ status, error, settings, updateSettings, seeded, athlete, notify, rest, startRest, adjustRest, skipRest }),
-    [status, error, settings, updateSettings, seeded, athlete, notify, rest, startRest, adjustRest, skipRest]
+    () => ({ status, error, settings, updateSettings, seeded, athlete, notify, rest, startRest, adjustRest, skipRest, undo, offerUndo, runUndo, dismissUndo }),
+    [status, error, settings, updateSettings, seeded, athlete, notify, rest, startRest, adjustRest, skipRest, undo, offerUndo, runUndo, dismissUndo]
   );
   return <FitnessContext.Provider value={value}>{children}</FitnessContext.Provider>;
 }

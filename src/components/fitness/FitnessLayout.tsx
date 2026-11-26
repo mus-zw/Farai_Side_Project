@@ -4,6 +4,7 @@ import { Home, CalendarCheck, Dumbbell, LineChart, UserRound } from 'lucide-reac
 import { FitnessProvider, useFitness } from './FitnessProvider';
 import { FitnessAuthProvider, useFitnessAuth } from './FitnessAuthProvider';
 import RestTimerBar from './RestTimerBar';
+import UndoBar from './UndoBar';
 import Onboarding from './Onboarding';
 import SiteLink from '../SiteLink';
 import { isStandalone, linkTo } from '../../utils/site';
@@ -111,6 +112,7 @@ function Shell() {
       {ready && athlete && (
         <>
           <RestTimerBar />
+          <UndoBar />
           <nav className="f-bottomnav" aria-label="Fitness navigation">
             {TABS.map(({ to, label, Icon, end }) => (
               <NavLink key={to} to={to} end={end} className="f-nav-item" data-testid={`tab-${label.toLowerCase()}`}>

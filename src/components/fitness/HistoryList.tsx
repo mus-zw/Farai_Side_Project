@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { ChevronDown, Pencil, Trash2 } from 'lucide-react';
 import { DAY_LABEL, SET_TYPE_TAG, Session, Unit, dateLabel, sessionSetCount, sessionVolume } from '../../utils/fitness';
 import { db } from '../../utils/fitnessDb';
+import { useFitness } from './FitnessProvider';
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /** Saved sessions, newest first. Tap one to see its sets; deleting asks for a second tap. */
 export default function HistoryList({ sessions, unit, onEdit }: { sessions: Session[]; unit: Unit; onEdit?: (s: Session) => void }) {
+  const { offerUndo } = useFitness();
   const [open, setOpen] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const shown = sessions.slice(0, 20);
@@ -51,6 +53,9 @@ export default function HistoryList({ sessions, unit, onEdit }: { sessions: Sess
                   onClick={() => {
                     if (confirm === s.id) {
                       void db.sessions.delete(s.id);
+                      offerUndo(`Deleted ${DAY_LABEL[s.day]} session`, async () => {
+                        await db.sessions.put(s);
+                      });
                       setConfirm(null);
                     } else setConfirm(s.id);
                   }}

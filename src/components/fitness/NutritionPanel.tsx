@@ -5,6 +5,7 @@ import TargetsCheck from './TargetsCheck';
 import { db } from '../../utils/fitnessDb';
 import type { MealDraft } from '../../utils/mealScan';
 import MealScan from './MealScan';
+import { useFitness } from './FitnessProvider';
 
 interface Props {
   date: string;
@@ -12,6 +13,8 @@ interface Props {
   meals: Meal[];
   targets: Targets;
   onTargets: (t: Partial<Targets>) => void;
+  /** Meals you log often, newest first: one tap adds one again to the day shown. */
+  recent?: Meal[];
 }
 
 function Bar({ label, value, target, unit, testId }: { label: string; value: number; target: number; unit: string; testId?: string }) {
@@ -39,7 +42,8 @@ function Bar({ label, value, target, unit, testId }: { label: string; value: num
 }
 
 /** One day's meals against calorie, protein, carb, fat and meal-count targets. */
-export default function NutritionPanel({ date, onDate, meals, targets, onTargets }: Props) {
+export default function NutritionPanel({ date, onDate, meals, targets, onTargets, recent = [] }: Props) {
+  const { offerUndo } = useFitness();
   const [f, setF] = useState({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
   const [editing, setEditing] = useState(false);
   /** The meal being edited (the whole record, so its id and date survive a change of day), or null when adding. */
@@ -137,6 +141,23 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
     setF({ name: d.name, kcal: String(d.kcal), protein: String(d.protein), carbs: String(d.carbs), fat: String(d.fat) });
     setKcalAuto(false); // the estimate's own calories stand until changed
     setScanNote('Estimated from your photo. Check the portions and numbers, change anything that is off, then press Add.');
+  };
+
+  // One tap puts a recent meal on the day shown; Undo takes it straight back.
+  const relog = async (m: Meal) => {
+    if (busy.current) return;
+    busy.current = true;
+    const id = newId();
+    try {
+      await db.meals.put({ id, date, name: m.name, kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat });
+      offerUndo(`Added ${m.name}`, async () => {
+        await db.meals.delete(id);
+      });
+    } catch {
+      setError('Could not save to this browser (storage may be full or blocked). Try again.');
+    } finally {
+      busy.current = false;
+    }
   };
 
   const startEdit = (m: Meal) => {
@@ -239,6 +260,9 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
                 onClick={() => {
                   if (editingMeal?.id === m.id) cancelEdit();
                   void db.meals.delete(m.id);
+                  offerUndo(`Removed ${m.name}`, async () => {
+                    await db.meals.put(m);
+                  });
                 }}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -247,6 +271,19 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
           </li>
         ))}
       </ul>
+
+      {recent.length > 0 && !editingMeal && (
+        <div className="space-y-1.5" data-testid="recent-meals">
+          <div className="f-small">Log again</div>
+          <div className="flex flex-wrap gap-1.5">
+            {recent.map((m) => (
+              <button key={m.id} type="button" className="f-chip" style={{ minHeight: 36 }} data-testid="recent-meal" aria-label={`Add ${m.name} again, ${m.kcal} calories`} onClick={() => void relog(m)}>
+                {m.name} · {m.kcal}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <MealScan onDraft={applyDraft} />
 

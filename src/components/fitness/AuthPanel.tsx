@@ -62,7 +62,7 @@ export default function AuthPanel() {
           {busy ? 'One moment…' : up ? 'Create account' : 'Sign in'}
         </button>
         {!up && (
-          <button type="button" className="text-[11px] font-semibold f-accent hover:underline" onClick={() => void forgot()} data-testid="auth-forgot">
+          <button type="button" className="inline-flex min-h-[32px] items-center text-[11px] font-semibold f-accent hover:underline" onClick={() => void forgot()} data-testid="auth-forgot">
             Forgot password?
           </button>
         )}

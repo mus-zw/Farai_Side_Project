@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DEFAULT_SETTINGS, DayType, nextInRotation, plannedDayFor, weekPlan } from '../../utils/fitness';
 import { getCues, sessionsNewestFirst, useLive } from '../../utils/fitnessDb';
 import { useFitness } from '../../components/fitness/FitnessProvider';
@@ -16,7 +16,7 @@ interface Pick {
   weekday?: string;
 }
 
-export default function TrainPage({ appendRequest, onAppendHandled }: { appendRequest?: { exercises: ExerciseLog[]; key: number } | null; onAppendHandled?: () => void } = {}) {
+export default function TrainPage({ appendRequest, onAppendHandled, startRequest }: { appendRequest?: { exercises: ExerciseLog[]; key: number } | null; onAppendHandled?: () => void; startRequest?: { day: DayType; key: number } | null } = {}) {
   const { settings, updateSettings, notify, startRest } = useFitness();
   // Newest first.
   const sessions = useLive(sessionsNewestFirst, [], NONE);
@@ -32,6 +32,13 @@ export default function TrainPage({ appendRequest, onAppendHandled }: { appendRe
   const [openCount, setOpenCount] = useState(0); // bumps when a plan day is tapped, to open that session
   const pick = pickRaw && (!pickRaw.weekday || weekPlan(schedule).some((w) => w.weekday === pickRaw.weekday && w.day === pickRaw.day)) ? pickRaw : null;
   const activeDay: DayType = pick?.day ?? today ?? next;
+
+  // "Start Push" in the Today header opens that day's session, as if its plan day had been tapped.
+  useEffect(() => {
+    if (!startRequest) return;
+    setPick({ day: startRequest.day });
+    setOpenCount((n) => n + 1);
+  }, [startRequest?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-4">
