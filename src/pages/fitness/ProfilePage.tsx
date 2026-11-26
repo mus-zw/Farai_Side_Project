@@ -16,6 +16,7 @@ import { useProfile } from '../../components/ProfileProvider';
 import BackupPanel from '../../components/fitness/BackupPanel';
 import AuthPanel from '../../components/fitness/AuthPanel';
 import TargetsCheck from '../../components/fitness/TargetsCheck';
+import { ThemePref, useFitnessTheme } from '../../components/fitness/FitnessTheme';
 import { useFitnessAuth } from '../../components/fitness/FitnessAuthProvider';
 
 const REST_PRESETS = [60, 90, 120, 180];
@@ -23,6 +24,7 @@ const REST_PRESETS = [60, 90, 120, 180];
 export default function ProfilePage() {
   const { settings, updateSettings, seeded, athlete, notify } = useFitness();
   const { openProfile } = useProfile();
+  const theme = useFitnessTheme();
   const { openFitnessPro } = useUnlockUi();
   const { record, revoke } = useConsent();
   const fa = useFitnessAuth();
@@ -152,6 +154,24 @@ export default function ProfilePage() {
             {fa.notice && <p role="status" className="text-xs" style={{ color: 'var(--f-good)' }}>{fa.notice}</p>}
           </>
         )}
+      </section>
+
+      <section className="f-card space-y-3" data-testid="appearance-card">
+        <h2 className="f-h">Appearance</h2>
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Appearance">
+          {(
+            [
+              ['system', 'System'],
+              ['light', 'Light'],
+              ['dark', 'Dark'],
+            ] as [ThemePref, string][]
+          ).map(([value, label]) => (
+            <button key={value} type="button" role="radio" aria-checked={theme.pref === value} data-testid={`theme-${value}`} className="f-choice" style={{ alignItems: 'center' }} onClick={() => theme.setPref(value)}>
+              <span className="font-semibold">{label}</span>
+            </button>
+          ))}
+        </div>
+        <p className="f-small">System follows your device. Showing {theme.mode} now.</p>
       </section>
 
       <section className="f-card space-y-3" data-testid="plan-card">

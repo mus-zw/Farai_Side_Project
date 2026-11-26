@@ -1,10 +1,11 @@
 import { Suspense, useEffect } from 'react';
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
-import { Home, CalendarCheck, Dumbbell, LineChart, UserRound } from 'lucide-react';
+import { Home, CalendarCheck, Dumbbell, LineChart, Utensils } from 'lucide-react';
 import { FitnessProvider, useFitness } from './FitnessProvider';
 import { FitnessAuthProvider, useFitnessAuth } from './FitnessAuthProvider';
 import RestTimerBar from './RestTimerBar';
 import UndoBar from './UndoBar';
+import { FitnessTheme } from './FitnessTheme';
 import { registerFitnessOffline } from '../../utils/offline';
 import Onboarding from './Onboarding';
 import SiteLink from '../SiteLink';
@@ -14,12 +15,15 @@ import { useEntitlements } from '../../utils/useEntitlements';
 
 const TABS = [
   { to: '/fitness', label: 'Today', Icon: CalendarCheck, end: true },
+  { to: '/fitness/train', label: 'Train', Icon: Dumbbell, end: false },
+  { to: '/fitness/nutrition', label: 'Nutrition', Icon: Utensils, end: false },
   { to: '/fitness/progress', label: 'Progress', Icon: LineChart, end: false },
-  { to: '/fitness/profile', label: 'Profile', Icon: UserRound, end: false },
 ] as const;
 
 const TITLES: Record<string, string> = {
   '/fitness': 'Today',
+  '/fitness/train': 'Train',
+  '/fitness/nutrition': 'Nutrition',
   '/fitness/progress': 'Progress',
   '/fitness/profile': 'Profile',
 };
@@ -151,12 +155,12 @@ function Shell() {
 /** The standalone fitness app shell: its own theme, app bar and dock, and a one-click way back to the portfolio. */
 export default function FitnessLayout({ onNotify }: { onNotify: (type: 'success' | 'error' | 'info', message: string) => void }) {
   return (
-    <div data-theme="fitness">
+    <FitnessTheme>
       <FitnessProvider notify={onNotify}>
         <FitnessAuthProvider>
           <Shell />
         </FitnessAuthProvider>
       </FitnessProvider>
-    </div>
+    </FitnessTheme>
   );
 }

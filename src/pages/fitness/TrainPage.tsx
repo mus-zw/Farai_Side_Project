@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { DEFAULT_SETTINGS, DayType, nextInRotation, plannedDayFor, weekPlan } from '../../utils/fitness';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { DEFAULT_SETTINGS, DayType, ExerciseLog, Session, nextInRotation, plannedDayFor, weekPlan } from '../../utils/fitness';
 import { getCues, sessionsNewestFirst, useLive } from '../../utils/fitnessDb';
 import { useFitness } from '../../components/fitness/FitnessProvider';
 import PlanCard from '../../components/fitness/PlanCard';
+import QuickLog from '../../components/fitness/QuickLog';
 import SessionLogger from '../../components/fitness/SessionLogger';
 import HistoryList from '../../components/fitness/HistoryList';
-import type { ExerciseLog, Session } from '../../utils/fitness';
 
 const NONE: Session[] = [];
 const NO_CUES: Record<string, string> = {};
@@ -16,12 +17,16 @@ interface Pick {
   weekday?: string;
 }
 
-export default function TrainPage({ appendRequest, onAppendHandled, startRequest }: { appendRequest?: { exercises: ExerciseLog[]; key: number } | null; onAppendHandled?: () => void; startRequest?: { day: DayType; key: number } | null } = {}) {
+/** Everything for training: the plan, the session you are logging (recovered if it was left open), and history. */
+export default function TrainPage() {
   const { settings, updateSettings, notify, startRest } = useFitness();
+  const location = useLocation();
+  const navigate = useNavigate();
   // Newest first.
   const sessions = useLive(sessionsNewestFirst, [], NONE);
   const cues = useLive(getCues, [], NO_CUES);
   const [editRequest, setEditRequest] = useState<{ session: Session; key: number } | null>(null);
+  const [append, setAppend] = useState<{ exercises: ExerciseLog[]; key: number } | null>(null);
   const next = nextInRotation(sessions);
   const schedule = settings.schedule ?? DEFAULT_SETTINGS.schedule;
   const today = plannedDayFor(schedule);
@@ -33,15 +38,19 @@ export default function TrainPage({ appendRequest, onAppendHandled, startRequest
   const pick = pickRaw && (!pickRaw.weekday || weekPlan(schedule).some((w) => w.weekday === pickRaw.weekday && w.day === pickRaw.day)) ? pickRaw : null;
   const activeDay: DayType = pick?.day ?? today ?? next;
 
-  // "Start Push" in the Today header opens that day's session, as if its plan day had been tapped.
+  // "Start workout" on Today lands here with the day to open; take it once, then clear it so a reload does not repeat it.
   useEffect(() => {
-    if (!startRequest) return;
-    setPick({ day: startRequest.day });
+    const start = (location.state as { start?: DayType } | null)?.start;
+    if (!start) return;
+    setPick({ day: start });
     setOpenCount((n) => n + 1);
-  }, [startRequest?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+    navigate(location.pathname, { replace: true, state: null });
+    window.setTimeout(() => document.querySelector('[data-testid=session-draft]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+  }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-4">
+      <QuickLog mode="workout" notify={notify} onExercises={(exercises) => setAppend({ exercises, key: Date.now() })} />
       <PlanCard
         schedule={schedule}
         onSchedule={(s) => {
@@ -68,8 +77,8 @@ export default function TrainPage({ appendRequest, onAppendHandled, startRequest
         startRest={startRest}
         editRequest={editRequest}
         onEditHandled={() => setEditRequest(null)}
-        appendRequest={appendRequest}
-        onAppendHandled={onAppendHandled}
+        appendRequest={append}
+        onAppendHandled={() => setAppend(null)}
       />
       <HistoryList sessions={sessions} unit={settings.unit} onEdit={(session) => setEditRequest({ session, key: Date.now() })} />
     </div>

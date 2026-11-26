@@ -14,6 +14,8 @@ import FitnessGate from './components/fitness/FitnessGate';
 // holding an old link gets the Launching Soon page without downloading the app.
 const FitnessLayout = lazy(() => import('./components/fitness/FitnessLayout'));
 const TodayPage = lazy(() => import('./pages/fitness/TodayPage'));
+const TrainPage = lazy(() => import('./pages/fitness/TrainPage'));
+const NutritionPage = lazy(() => import('./pages/fitness/NutritionPage'));
 const ProgressPage = lazy(() => import('./pages/fitness/ProgressPage'));
 const ProfilePage = lazy(() => import('./pages/fitness/ProfilePage'));
 const AppLoading = () => <div className="min-h-screen" style={{ background: '#0a0c0f' }} aria-busy="true" />;
@@ -85,8 +87,9 @@ export default function App() {
             >
               <Route index element={<TodayPage />} />
               <Route path="progress" element={<ProgressPage />} />
-              {/* Train and Nutrition became "Today", and the Form Coach moved into Progress. */}
-              <Route path="nutrition" element={<Navigate to="/fitness" replace />} />
+              <Route path="train" element={<TrainPage />} />
+              <Route path="nutrition" element={<NutritionPage />} />
+              {/* The Form Coach lives in Progress. */}
               <Route path="coach" element={<Navigate to="/fitness/progress#coach" replace />} />
               <Route path="profile" element={<ProfilePage />} />
               {/* The old name for the profile screen. */}

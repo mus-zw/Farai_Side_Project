@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, Zap } from 'lucide-react';
 import { ExerciseLog, newId, toISODate } from '../../utils/fitness';
 import { QuickLogResult, parseQuickLog } from '../../utils/quickLog';
@@ -6,21 +6,35 @@ import { db } from '../../utils/fitnessDb';
 import { protectStorage } from '../../utils/offline';
 
 interface Props {
-  /** Exercises read from the note; the session logger adds them to the open session. */
-  onExercises: (exercises: ExerciseLog[]) => void;
+  /** What this box is for: sets on the Train page, meals on the Nutrition page. A note of the other kind is pointed to its page. */
+  mode: 'workout' | 'meal';
+  /** Exercises read from the note; the session logger adds them to the open session (workout mode). */
+  onExercises?: (exercises: ExerciseLog[]) => void;
   notify: (type: 'success' | 'error' | 'info', message: string) => void;
+  /** Changes when something else (a quick action on Today) asks for the box to take focus. */
+  focusKey?: number;
 }
+
+const COPY = {
+  workout: { title: 'Log sets in a sentence', placeholder: 'bench 80x8x3, squat 5x5 @ 100', example: '"bench 80x8x3"' },
+  meal: { title: 'Log a meal in a sentence', placeholder: '2 eggs, toast, 450 kcal', example: '"2 eggs, toast" or "chicken 450 kcal 40p"' },
+} as const;
 
 /**
  * One box for fast, partial logging: type "2 eggs, toast" or "bench 80x8x3", check what was understood,
  * and add it. It is read by plain rules on this device, so nothing is sent anywhere, and numbers you
  * type always win over the estimates.
  */
-export default function QuickLog({ onExercises, notify }: Props) {
+export default function QuickLog({ mode, onExercises, notify, focusKey }: Props) {
   const [text, setText] = useState('');
   const [result, setResult] = useState<QuickLogResult | null>(null);
   const [error, setError] = useState('');
   const busy = useRef(false);
+  const areaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [hint, setHint] = useState('');
+  useEffect(() => {
+    if (focusKey) areaRef.current?.focus();
+  }, [focusKey]);
 
   const read = () => {
     setError('');
@@ -28,9 +42,12 @@ export default function QuickLog({ onExercises, notify }: Props) {
       setResult(null);
       return;
     }
-    const r = parseQuickLog(text);
+    const parsed = parseQuickLog(text);
+    // Only this page's kind is added here; the other kind is pointed to its own page instead of being dropped silently.
+    const r = { ...parsed, meals: mode === 'meal' ? parsed.meals : [], exercises: mode === 'workout' ? parsed.exercises : [] };
+    setHint(mode === 'meal' && parsed.exercises.length ? 'That looks like workout notes: log those on the Train tab.' : mode === 'workout' && parsed.meals.length ? 'That looks like a meal: log it on the Nutrition tab.' : '');
     setResult(r);
-    if (r.meals.length === 0 && r.exercises.length === 0) setError('Nothing I could read there. Try "2 eggs, toast", "chicken 450 kcal 40p" or "bench 80x8x3".');
+    if (r.meals.length === 0 && r.exercises.length === 0 && !parsed.exercises.length && !parsed.meals.length) setError(`Nothing I could read there. Try ${COPY[mode].example}.`);
   };
 
   const drop = (kind: 'meal' | 'exercise', i: number) =>
@@ -43,9 +60,9 @@ export default function QuickLog({ onExercises, notify }: Props) {
       const date = toISODate();
       for (const m of result.meals) await db.meals.put({ id: newId(), date, name: m.name, kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat });
       void protectStorage();
-      if (result.exercises.length) onExercises(result.exercises);
+      if (result.exercises.length) onExercises?.(result.exercises);
       const parts = [result.meals.length ? `${result.meals.length} meal${result.meals.length > 1 ? 's' : ''}` : '', result.exercises.length ? `${result.exercises.length} exercise${result.exercises.length > 1 ? 's' : ''}` : ''].filter(Boolean);
-      notify('success', `Added ${parts.join(' and ')}. Exercises sit in your open session until you finish and save it.`);
+      notify('success', mode === 'workout' ? `Added ${parts.join(' and ')} to your session. They are saved when you finish it.` : `Added ${parts.join(' and ')}.`);
       setText('');
       setResult(null);
       setError('');
@@ -62,7 +79,7 @@ export default function QuickLog({ onExercises, notify }: Props) {
     <section className="f-card space-y-3" data-testid="quick-log">
       <div>
         <h2 className="f-h flex items-center gap-2">
-          <Zap className="h-4 w-4 f-accent" aria-hidden="true" /> Quick log
+          <Zap className="h-4 w-4 f-accent" aria-hidden="true" /> {COPY[mode].title}
         </h2>
         <p className="f-small">Type what you ate or lifted. Read on this device; nothing is sent anywhere.</p>
       </div>
@@ -86,7 +103,8 @@ export default function QuickLog({ onExercises, notify }: Props) {
               read();
             }
           }}
-          placeholder={'2 eggs, toast, 450 kcal\nbench 80x8x3, squat 5x5 @ 100'}
+          placeholder={COPY[mode].placeholder}
+          ref={areaRef}
           aria-label="Quick log: what you ate or lifted"
           data-testid="quick-text"
         />
@@ -98,6 +116,12 @@ export default function QuickLog({ onExercises, notify }: Props) {
       {error && (
         <p role="alert" className="text-xs" style={{ color: 'var(--f-bad)' }} data-testid="quick-error">
           {error}
+        </p>
+      )}
+
+      {hint && (
+        <p role="status" className="text-xs" style={{ color: 'var(--f-gold)' }} data-testid="quick-hint">
+          {hint}
         </p>
       )}
 

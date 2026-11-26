@@ -1,16 +1,20 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Meal, toISODate } from '../../utils/fitness';
 import { mealsByDate } from '../../utils/fitnessMath';
 import { db, useLive } from '../../utils/fitnessDb';
 import { useFitness } from '../../components/fitness/FitnessProvider';
 import NutritionPanel from '../../components/fitness/NutritionPanel';
 import MealFrequencyCard from '../../components/fitness/MealFrequencyCard';
+import QuickLog from '../../components/fitness/QuickLog';
 
 const NO_MEALS: Meal[] = [];
 
 export default function NutritionPage() {
-  const { settings, updateSettings } = useFitness();
+  const { settings, updateSettings, notify } = useFitness();
+  const location = useLocation();
+  // "Log a meal" on Today lands here asking for the quick-log box to take focus.
+  const focusKey = (location.state as { focus?: string } | null)?.focus === 'meal' ? Number(location.key.replace(/\D/g, '').slice(0, 8)) || 1 : undefined;
   const [date, setDate] = useState(toISODate());
   const meals = useLive(() => db.meals.toArray(), [], NO_MEALS);
   const byDate = mealsByDate(meals);
@@ -27,6 +31,7 @@ export default function NutritionPage() {
 
   return (
     <div className="space-y-4">
+      <QuickLog mode="meal" notify={notify} focusKey={focusKey} />
       <NutritionPanel date={date} onDate={setDate} meals={byDate[date] ?? NO_MEALS} targets={settings.targets} onTargets={(targets) => updateSettings({ targets })} recent={recent} />
       <MealFrequencyCard byDate={byDate} targets={settings.targets} />
       <p className="f-small" data-testid="weight-moved">

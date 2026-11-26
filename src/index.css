@@ -134,6 +134,15 @@ body {
   --f-gold: #ffb020;
   --f-good: #3ddc97;
   --f-bad: #ff5470;
+  --f-top-bg: rgba(10, 12, 15, 0.9);
+  --f-nav-bg: rgba(14, 17, 21, 0.96);
+  --f-rest-bg: rgba(20, 24, 29, 0.96);
+  --f-pop-bg: #171c22;
+  --f-border-strong: #3a4552;
+  --f-placeholder: #7a8696;
+  --f-tag-warm: #7fb4ff;
+  --f-tag-drop: #c79bff;
+  --f-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   --f-radius: 16px;
   --f-nav-h: 64px;
   color-scheme: dark;
@@ -141,11 +150,39 @@ body {
   background: var(--f-bg);
   font-family: var(--font-sans);
 }
+/* Light mode: same tokens, different values. The accent is deepened so it still reads as text on white. */
+[data-theme="fitness"][data-mode="light"] {
+  --f-bg: #f4f6f9;
+  --f-surface: #ffffff;
+  --f-surface-2: #eceff4;
+  --f-border: #d3d9e2;
+  --f-text: #11161c;
+  --f-muted: #4f5b69;
+  --f-accent: #b0360a;
+  --f-accent-ink: #ffffff;
+  --f-accent-soft: rgba(176, 54, 10, 0.1);
+  --f-gold: #8a5300;
+  --f-good: #0b7a4a;
+  --f-bad: #b3203b;
+  --f-top-bg: rgba(244, 246, 249, 0.92);
+  --f-nav-bg: rgba(255, 255, 255, 0.96);
+  --f-rest-bg: rgba(255, 255, 255, 0.97);
+  --f-pop-bg: #ffffff;
+  --f-border-strong: #aeb7c4;
+  --f-placeholder: #6b7787;
+  --f-tag-warm: #1d5fbf;
+  --f-tag-drop: #7b3fc4;
+  --f-shadow: 0 10px 30px rgba(17, 22, 28, 0.18);
+  color-scheme: light;
+}
+/* A few components hover to pure white; follow the theme's text colour instead. */
+[data-theme="fitness"] .hover\:text-white:hover { color: var(--f-text); }
+
 [data-theme="fitness"] .f-root {
   min-height: 100vh;
   min-height: 100dvh;
   background:
-    radial-gradient(ellipse at 50% -10%, rgba(255, 90, 31, 0.1), transparent 55%),
+    radial-gradient(ellipse at 50% -10%, color-mix(in srgb, var(--f-accent) 10%, transparent), transparent 55%),
     var(--f-bg);
   color: var(--f-text);
 }
@@ -160,7 +197,7 @@ body {
   gap: 8px;
   min-height: calc(56px + env(safe-area-inset-top));
   padding: env(safe-area-inset-top) max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
-  background: rgba(10, 12, 15, 0.9);
+  background: var(--f-top-bg);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--f-border);
 }
@@ -188,7 +225,7 @@ body {
   font-weight: 600;
   color: var(--f-text);
 }
-[data-theme="fitness"] .f-athlete:hover { border-color: #3a4552; }
+[data-theme="fitness"] .f-athlete:hover { border-color: var(--f-border-strong); }
 [data-theme="fitness"] .f-avatar {
   display: inline-flex;
   align-items: center;
@@ -208,7 +245,7 @@ body {
   flex: none;
   padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 176, 32, 0.5);
+  border: 1px solid color-mix(in srgb, var(--f-gold) 50%, transparent);
   color: var(--f-gold);
   font-size: 9px;
   font-weight: 800;
@@ -230,10 +267,10 @@ body {
   bottom: 0;
   z-index: 40;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   height: calc(var(--f-nav-h) + env(safe-area-inset-bottom));
   padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  background: rgba(14, 17, 21, 0.96);
+  background: var(--f-nav-bg);
   backdrop-filter: blur(14px);
   border-top: 1px solid var(--f-border);
 }
@@ -271,7 +308,7 @@ body {
   padding: 16px;
   min-width: 0;
 }
-[data-theme="fitness"] .f-card-accent { border-color: rgba(255, 90, 31, 0.5); }
+[data-theme="fitness"] .f-card-accent { border-color: color-mix(in srgb, var(--f-accent) 50%, transparent); }
 [data-theme="fitness"] .f-h { font-size: 15px; font-weight: 700; color: var(--f-text); font-family: var(--font-display); }
 [data-theme="fitness"] .f-muted { color: var(--f-muted); }
 [data-theme="fitness"] .f-small { font-size: 11.5px; color: var(--f-muted); }
@@ -295,7 +332,7 @@ body {
   color: var(--f-text);
   transition: border-color 0.15s, background 0.15s, opacity 0.15s;
 }
-[data-theme="fitness"] .f-btn:hover { border-color: #3a4552; }
+[data-theme="fitness"] .f-btn:hover { border-color: var(--f-border-strong); }
 /* White label on a deep orange fill (about 7.3:1) so the main action is crisp; the bright accent stays on the border. */
 [data-theme="fitness"] .f-btn-primary { background: #9a3412; border-color: var(--f-accent); color: #ffffff; font-weight: 800; }
 [data-theme="fitness"] .f-btn-primary:hover { background: #b23c15; }
@@ -318,7 +355,7 @@ body {
   color: var(--f-text);
   font-size: 14px;
 }
-[data-theme="fitness"] .f-input::placeholder { color: #566170; }
+[data-theme="fitness"] .f-input::placeholder { color: var(--f-placeholder); }
 [data-theme="fitness"] .f-input:focus { border-color: var(--f-accent); outline: none; }
 [data-theme="fitness"] .f-center { text-align: center; }
 
@@ -357,9 +394,9 @@ body {
   background: var(--f-surface-2);
   cursor: pointer;
 }
-[data-theme="fitness"] .f-tag[data-type="warmup"] { color: #7fb4ff; border-color: #2c4a73; }
-[data-theme="fitness"] .f-tag[data-type="drop"] { color: #c79bff; border-color: #4d3a73; }
-[data-theme="fitness"] .f-tag[data-type="failure"] { color: var(--f-bad); border-color: #6b2c3a; }
+[data-theme="fitness"] .f-tag[data-type="warmup"] { color: var(--f-tag-warm); border-color: color-mix(in srgb, var(--f-tag-warm) 45%, transparent); }
+[data-theme="fitness"] .f-tag[data-type="drop"] { color: var(--f-tag-drop); border-color: color-mix(in srgb, var(--f-tag-drop) 45%, transparent); }
+[data-theme="fitness"] .f-tag[data-type="failure"] { color: var(--f-bad); border-color: color-mix(in srgb, var(--f-bad) 45%, transparent); }
 
 [data-theme="fitness"] .f-timer {
   position: fixed;
@@ -374,9 +411,9 @@ body {
   gap: 8px;
   padding: 10px 12px;
   border-radius: 16px;
-  background: #171c22;
+  background: var(--f-pop-bg);
   border: 1px solid var(--f-accent);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--f-shadow);
 }
 [data-theme="fitness"] .f-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 [data-theme="fitness"] .f-table th { color: var(--f-muted); font-weight: 600; text-align: right; padding: 6px 8px; }
@@ -407,8 +444,8 @@ body {
   overflow-x: auto;
   padding: 8px 10px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 90, 31, 0.45);
-  background: rgba(20, 24, 29, 0.96);
+  border: 1px solid color-mix(in srgb, var(--f-accent) 45%, transparent);
+  background: var(--f-rest-bg);
   backdrop-filter: blur(8px);
   font-size: 11.5px;
 }
@@ -429,5 +466,5 @@ body {
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-[data-theme="fitness"] .f-choice:hover { border-color: #3a4552; }
+[data-theme="fitness"] .f-choice:hover { border-color: var(--f-border-strong); }
 [data-theme="fitness"] .f-choice[aria-checked="true"] { border-color: var(--f-accent); background: var(--f-accent-soft); }
