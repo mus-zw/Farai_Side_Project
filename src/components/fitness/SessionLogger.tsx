@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Trash2, Check } from 'lucide-react';
+import { Plus, Trash2, Check, Pin } from 'lucide-react';
 import {
   DAY_LABEL,
   DAY_TYPES,
@@ -12,6 +12,7 @@ import {
   SET_TYPE_TAG,
   Settings,
   blankSet,
+  cueKey,
   dateLabel,
   newExercise,
   newSession,
@@ -22,11 +23,13 @@ import {
   workingSets,
 } from '../../utils/fitness';
 import { estimate1RM } from '../../utils/fitnessMath';
-import { db, getDraft, saveDraft } from '../../utils/fitnessDb';
+import { db, getDraft, saveDraft, setCue } from '../../utils/fitnessDb';
 
 interface Props {
   /** Saved sessions, newest first. */
   sessions: Session[];
+  /** Pinned cues, keyed by lower-case exercise name. */
+  cues: Record<string, string>;
   settings: Settings;
   suggested: DayType;
   onSaved: (message: string) => void;
@@ -57,10 +60,12 @@ function useDraft() {
 }
 
 /** Start a Push, Pull or Legs session, then log each set as one row. Sets start prefilled from last time. */
-export default function SessionLogger({ sessions, settings, suggested, onSaved, startRest }: Props) {
+export default function SessionLogger({ sessions, cues, settings, suggested, onSaved, startRest }: Props) {
   const { draft, setDraft, loaded } = useDraft();
   const [newName, setNewName] = useState('');
   const [error, setError] = useState('');
+  const [cueEditing, setCueEditing] = useState<string | null>(null);
+  const [cueText, setCueText] = useState('');
   const unit = settings.unit;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -146,6 +151,18 @@ export default function SessionLogger({ sessions, settings, suggested, onSaved, 
           </button>
         </div>
       </div>
+      {draft.exercises.some((e) => cues[cueKey(e.name)]) && (
+        <div className="f-cuebar" data-testid="cue-bar" aria-label="Pinned cues">
+          <Pin className="h-3.5 w-3.5 shrink-0 f-accent" />
+          {draft.exercises
+            .filter((e) => cues[cueKey(e.name)])
+            .map((e) => (
+              <span key={e.id}>
+                <strong>{e.name}:</strong> <span className="f-muted">{cues[cueKey(e.name)]}</span>
+              </span>
+            ))}
+        </div>
+      )}
       {error && (
         <p role="alert" className="text-xs" style={{ color: 'var(--f-bad)' }} data-testid="session-error">
           {error}
@@ -160,11 +177,53 @@ export default function SessionLogger({ sessions, settings, suggested, onSaved, 
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold">{ex.name}</div>
                 {ex.target && <div className="f-small">Target {ex.target} reps</div>}
+                {cues[cueKey(ex.name)] && cueEditing !== ex.id && (
+                  <div className="mt-0.5 flex items-start gap-1 text-[11px] f-accent" data-testid="exercise-cue">
+                    <Pin className="mt-0.5 h-3 w-3 shrink-0" /> {cues[cueKey(ex.name)]}
+                  </div>
+                )}
               </div>
+              <button
+                type="button"
+                className={cues[cueKey(ex.name)] ? 'f-accent' : 'f-muted hover:text-white'}
+                aria-label={cues[cueKey(ex.name)] ? `Edit pinned cue for ${ex.name}` : `Pin a cue to ${ex.name}`}
+                data-testid="pin-cue"
+                onClick={() => {
+                  setCueEditing(cueEditing === ex.id ? null : ex.id);
+                  setCueText(cues[cueKey(ex.name)] ?? '');
+                }}
+              >
+                <Pin className="h-4 w-4" />
+              </button>
               <button type="button" aria-label={`Remove ${ex.name}`} className="f-muted hover:text-white" onClick={() => patch((s) => ({ ...s, exercises: s.exercises.filter((e) => e.id !== ex.id) }))}>
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
+
+            {cueEditing === ex.id && (
+              <form
+                className="mb-2 flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void setCue(ex.name, cueText);
+                  setCueEditing(null);
+                }}
+              >
+                <input
+                  className="f-input"
+                  autoFocus
+                  maxLength={140}
+                  value={cueText}
+                  onChange={(e) => setCueText(e.target.value)}
+                  placeholder="A cue to keep in view, e.g. chest up, brace first"
+                  aria-label={`Pinned cue for ${ex.name}`}
+                  data-testid="cue-input"
+                />
+                <button type="submit" className="f-btn-primary" data-testid="cue-save" style={{ minHeight: 40 }}>
+                  {cueText.trim() ? 'Pin' : 'Unpin'}
+                </button>
+              </form>
+            )}
 
             {/* One row per set, laid out horizontally (the 1RM column is hidden on a phone). */}
             <div>

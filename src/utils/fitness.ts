@@ -106,6 +106,23 @@ export const DEFAULT_SETTINGS: Settings = {
   autoRest: true,
 };
 
+/**
+ * Cues pinned to an exercise (keyed by lower-case name), shown in the logger so
+ * they are in front of you mid-set. These are starting points you can edit.
+ */
+export const DEFAULT_CUES: Record<string, string> = {
+  'barbell bench press': 'Shoulder blades back and down, feet planted, bar to mid-chest.',
+  'overhead press': 'Squeeze glutes, ribs down, head through at the top.',
+  'back squat': 'Brace before you descend, knees track over toes, hip crease below knee.',
+  'romanian deadlift': 'Soft knees, push hips back, bar stays close to the legs.',
+  'barbell row': 'Hinge to about 45 degrees, pull to the lower ribs, no jerking.',
+  'pull-up or lat pulldown': 'Chest up, drive elbows down, full stretch at the bottom.',
+};
+
+export const cueKey = (exerciseName: string): string => exerciseName.trim().toLowerCase();
+
+export const MAX_CUE_LENGTH = 140;
+
 export const DEFAULT_DATA: FitnessData = {
   version: 1,
   unit: 'kg',

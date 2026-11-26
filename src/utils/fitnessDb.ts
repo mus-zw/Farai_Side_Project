@@ -14,15 +14,18 @@ import Dexie, { liveQuery, type Table } from 'dexie';
 import { useEffect, useState } from 'react';
 import {
   DAY_TYPES,
+  DEFAULT_CUES,
   DEFAULT_SETTINGS,
   DEFAULT_TARGETS,
   DayType,
   Goal,
+  MAX_CUE_LENGTH,
   Meal,
   Session,
   SetEntry,
   Settings,
   WeightEntry,
+  cueKey,
   cleanSession,
   clampNum,
   countedSets,
@@ -36,7 +39,7 @@ import {
   str,
   toISODate,
 } from './fitness';
-import { estimate1RM, toCSV } from './fitnessMath';
+import { estimate1RM, parseCSV, toCSV } from './fitnessMath';
 
 interface KV {
   key: string;
@@ -113,6 +116,32 @@ export async function getSettings(): Promise<Settings> {
 
 export async function saveSettings(next: Settings): Promise<void> {
   await db.kv.put({ key: 'settings', value: cleanSettings(next) });
+}
+
+/** Pinned exercise cues. Falls back to the built-in starting cues until you save your own. */
+export async function getCues(): Promise<Record<string, string>> {
+  return cleanCues((await db.kv.get('cues'))?.value, DEFAULT_CUES);
+}
+
+/** Pin (or, with empty text, unpin) a cue on an exercise. */
+export async function setCue(exerciseName: string, text: string): Promise<void> {
+  const cues = { ...(await getCues()) };
+  const key = cueKey(exerciseName);
+  const clean = text.trim().slice(0, MAX_CUE_LENGTH);
+  if (clean) cues[key] = clean;
+  else delete cues[key];
+  await db.kv.put({ key: 'cues', value: cues });
+}
+
+export function cleanCues(v: unknown, fallback: Record<string, string> = {}): Record<string, string> {
+  if (!isObj(v)) return fallback;
+  const out: Record<string, string> = {};
+  for (const [k, val] of Object.entries(v).slice(0, 300)) {
+    const key = k.trim().toLowerCase().slice(0, 80);
+    const text = typeof val === 'string' ? val.trim().slice(0, MAX_CUE_LENGTH) : '';
+    if (key && text) out[key] = text;
+  }
+  return out;
 }
 
 export async function getDraft(): Promise<Session | null> {
@@ -214,6 +243,7 @@ export async function seedSampleData(): Promise<void> {
     await db.weights.bulkPut(sampleWeights(today));
     await db.kv.bulkPut([
       { key: 'settings', value: DEFAULT_SETTINGS },
+      { key: 'cues', value: DEFAULT_CUES },
       { key: 'seeded', value: true },
       { key: 'initialized', value: true },
     ]);
@@ -226,6 +256,7 @@ export async function eraseAll(): Promise<void> {
     await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
     await db.kv.bulkPut([
       { key: 'settings', value: DEFAULT_SETTINGS },
+      { key: 'cues', value: DEFAULT_CUES },
       { key: 'seeded', value: false },
       { key: 'initialized', value: true },
     ]);
@@ -257,6 +288,7 @@ async function migrateLegacy(): Promise<boolean> {
     if (old.draft) await db.kv.put({ key: 'draft', value: old.draft });
     await db.kv.bulkPut([
       { key: 'settings', value: cleanSettings({ unit: old.unit, schedule: old.schedule, targets: old.targets }) },
+      { key: 'cues', value: DEFAULT_CUES },
       { key: 'seeded', value: false },
       { key: 'initialized', value: true },
     ]);
@@ -290,18 +322,21 @@ export interface Backup {
   sessions: Session[];
   meals: Meal[];
   weights: WeightEntry[];
+  /** Pinned exercise cues. Absent in older backups. */
+  cues?: Record<string, string>;
 }
 
 export const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
 
 export async function exportBackup(): Promise<Backup> {
-  const [settings, sessions, meals, weights] = await Promise.all([
+  const [settings, cues, sessions, meals, weights] = await Promise.all([
     getSettings(),
+    getCues(),
     db.sessions.orderBy('date').toArray(),
     db.meals.orderBy('date').toArray(),
     db.weights.orderBy('date').toArray(),
   ]);
-  return { app: 'farai-fitness', version: 2, exportedAt: new Date().toISOString(), settings, sessions, meals, weights };
+  return { app: 'farai-fitness', version: 2, exportedAt: new Date().toISOString(), settings, sessions, meals, weights, cues };
 }
 
 export interface ImportSummary {
@@ -334,6 +369,7 @@ export async function importBackup(json: unknown): Promise<ImportSummary> {
   const meals = pick(json.meals, (v) => cleanMeal(v), 20000);
   const weights = pick(json.weights, cleanWeight, 5000);
   const settings = cleanSettings(json.settings);
+  const cues = cleanCues(json.cues, DEFAULT_CUES);
 
   await db.transaction('rw', db.sessions, db.meals, db.weights, db.kv, async () => {
     await Promise.all([db.sessions.clear(), db.meals.clear(), db.weights.clear(), db.kv.clear()]);
@@ -342,11 +378,98 @@ export async function importBackup(json: unknown): Promise<ImportSummary> {
     await db.weights.bulkPut(weights);
     await db.kv.bulkPut([
       { key: 'settings', value: settings },
+      { key: 'cues', value: cues },
       { key: 'seeded', value: false },
       { key: 'initialized', value: true },
     ]);
   });
   return { sessions: sessions.length, meals: meals.length, weights: weights.length, skipped };
+}
+
+export interface CsvImportSummary {
+  kind: 'workouts' | 'nutrition' | 'weight';
+  added: number;
+  skipped: number;
+}
+
+export const MAX_CSV_BYTES = 5 * 1024 * 1024;
+const MAX_CSV_ROWS = 50000;
+
+/**
+ * Add rows from a CSV exported by this app (workouts, nutrition or body
+ * weight; the header decides which). Unlike the JSON restore this ADDS to what
+ * is there: workouts on a date and day you already have, and identical meals,
+ * are skipped so importing your own export twice does not duplicate it.
+ */
+export async function importCsv(text: string): Promise<CsvImportSummary> {
+  const rows = parseCSV(text).slice(0, MAX_CSV_ROWS + 1);
+  if (rows.length < 2) throw new Error('That CSV has no data rows.');
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const col = (name: string) => header.findIndex((h) => h === name || h.startsWith(name + '_'));
+  const data = rows.slice(1);
+  let skipped = 0;
+
+  if (col('exercise') >= 0 && col('day') >= 0 && col('reps') >= 0) {
+    const [iDate, iDay, iEx, iType, iW, iR] = [col('date'), col('day'), col('exercise'), col('type'), col('weight'), col('reps')];
+    const existing = new Set((await db.sessions.toArray()).map((s) => `${s.date}|${s.day}`));
+    const groups = new Map<string, Session>();
+    for (const r of data) {
+      const date = r[iDate]?.trim();
+      const day = r[iDay]?.trim().toLowerCase();
+      const name = r[iEx]?.trim().slice(0, 80);
+      if (!date || !DATE_RE.test(date) || !DAY_TYPES.includes(day as DayType) || !name || existing.has(`${date}|${day}`)) {
+        skipped += 1;
+        continue;
+      }
+      const key = `${date}|${day}`;
+      let s = groups.get(key);
+      if (!s) {
+        s = { id: newId(), date, day: day as DayType, exercises: [], notes: '', savedAt: Date.parse(`${date}T12:00:00`) || Date.now() };
+        groups.set(key, s);
+      }
+      let ex = s.exercises.find((e) => e.name === name);
+      if (!ex) {
+        ex = { id: newId(), name, sets: [] };
+        s.exercises.push(ex);
+      }
+      const type = ['normal', 'warmup', 'drop', 'failure'].includes(r[iType]) ? (r[iType] as SetEntry['type']) : 'normal';
+      ex.sets.push({ weight: String(num(r[iW] ?? '') || ''), reps: String(Math.round(num(r[iR] ?? ''))), done: true, type });
+    }
+    const sessions = [...groups.values()].map((s) => cleanSession(s)).filter((s): s is Session => s !== null);
+    await db.sessions.bulkPut(sessions);
+    return { kind: 'workouts', added: sessions.length, skipped };
+  }
+
+  if (col('meal') >= 0 && col('kcal') >= 0) {
+    const [iDate, iName, iK, iP, iC, iF] = [col('date'), col('meal'), col('kcal'), col('protein'), col('carbs'), col('fat')];
+    const have = new Set((await db.meals.toArray()).map((m) => `${m.date}|${m.name}|${m.kcal}`));
+    const meals: Meal[] = [];
+    for (const r of data) {
+      const m = cleanMeal({ date: r[iDate]?.trim(), name: r[iName], kcal: num(r[iK] ?? ''), protein: num(r[iP] ?? ''), carbs: num(r[iC] ?? ''), fat: num(r[iF] ?? '') });
+      if (!m || have.has(`${m.date}|${m.name}|${m.kcal}`)) {
+        skipped += 1;
+        continue;
+      }
+      have.add(`${m.date}|${m.name}|${m.kcal}`);
+      meals.push(m);
+    }
+    await db.meals.bulkPut(meals);
+    return { kind: 'nutrition', added: meals.length, skipped };
+  }
+
+  if (col('weight') >= 0 && col('date') >= 0) {
+    const [iDate, iW] = [col('date'), col('weight')];
+    const weights: WeightEntry[] = [];
+    for (const r of data) {
+      const w = cleanWeight({ date: r[iDate]?.trim(), value: num(r[iW] ?? '') });
+      if (w) weights.push(w);
+      else skipped += 1;
+    }
+    await db.weights.bulkPut(weights); // one weigh-in per day: the same date is replaced
+    return { kind: 'weight', added: weights.length, skipped };
+  }
+
+  throw new Error('Unrecognised CSV. Import a workouts, nutrition or body weight CSV exported from this app.');
 }
 
 /** One row per done set. */

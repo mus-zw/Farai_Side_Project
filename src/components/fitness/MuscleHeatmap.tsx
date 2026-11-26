@@ -63,9 +63,16 @@ function Figure({ shapes, sets, days, offset, label }: { shapes: Shape[]; sets: 
       <Silhouette />
       {shapes.map((s, i) => {
         const h = heat(sets[s.m], days);
-        const props = { key: i, ...s.a, fill: heatColor(h), stroke: 'rgba(0,0,0,0.35)', strokeWidth: 0.8, 'data-muscle': s.m } as any;
+        const props = { ...s.a, fill: heatColor(h), stroke: 'rgba(0,0,0,0.35)', strokeWidth: 0.8, 'data-muscle': s.m } as any;
         const title = <title>{`${MUSCLES.find((m) => m.id === s.m)?.label}: ${sets[s.m].toFixed(1)} sets`}</title>;
-        return s.el === 'ellipse' ? <ellipse {...props}>{title}</ellipse> : s.el === 'rect' ? <rect {...props}>{title}</rect> : <path {...props} strokeLinejoin="round">{title}</path>;
+        // key is passed directly, not through the props spread (React warns otherwise).
+        return s.el === 'ellipse' ? (
+          <ellipse key={i} {...props}>{title}</ellipse>
+        ) : s.el === 'rect' ? (
+          <rect key={i} {...props}>{title}</rect>
+        ) : (
+          <path key={i} {...props} strokeLinejoin="round">{title}</path>
+        );
       })}
       <text x="50" y="224" textAnchor="middle" fontSize="9" fill="var(--f-muted)">
         {label}

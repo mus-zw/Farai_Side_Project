@@ -312,3 +312,20 @@ body {
   [data-theme="fitness"] .f-setgrid { grid-template-columns: 2.75rem 4.4rem minmax(0, 1fr) minmax(0, 1fr) 3.2rem 2.4rem 1.4rem; }
   [data-theme="fitness"] .f-setgrid .f-e1 { display: block; }
 }
+
+/* Pinned cues: stays in view while you scroll through a session. */
+[data-theme="fitness"] .f-cuebar {
+  position: sticky;
+  top: 58px;
+  z-index: 25;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 90, 31, 0.45);
+  background: rgba(20, 24, 29, 0.96);
+  backdrop-filter: blur(8px);
+  font-size: 11.5px;
+}
+[data-theme="fitness"] .f-cuebar > span { flex: 0 0 auto; max-width: 260px; }

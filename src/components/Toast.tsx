@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 
 export interface ToastMessage {
@@ -13,6 +14,8 @@ interface ToastProps {
 }
 
 export default function Toast({ toasts, onDismiss }: ToastProps) {
+  // The fitness area has a bottom tab bar and rest timer; keep messages clear of them.
+  const inFitness = useLocation().pathname.startsWith('/fitness');
   useEffect(() => {
     if (toasts.length === 0) return;
     const timer = setTimeout(() => {
@@ -26,7 +29,7 @@ export default function Toast({ toasts, onDismiss }: ToastProps) {
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"
+      className={`fixed right-6 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none ${inFitness ? 'bottom-44 right-4 left-4 ml-auto' : 'bottom-6'}`}
     >
       {toasts.map((toast) => {
         let icon = <Info className="h-4 w-4 text-cyan-400 shrink-0" />;

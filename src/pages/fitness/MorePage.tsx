@@ -110,8 +110,11 @@ export default function MorePage() {
           <button type="button" className="f-btn" onClick={openProfile}>
             <UserCircle2 className="h-4 w-4" /> Profile &amp; interests
           </button>
-          <Link to="/home" className="f-btn">
+          <Link to="/" className="f-btn" data-testid="more-portfolio">
             <ArrowLeft className="h-4 w-4" /> Back to portfolio
+          </Link>
+          <Link to="/demo" className="f-btn">
+            CV Demo
           </Link>
         </div>
       </section>

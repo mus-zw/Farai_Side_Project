@@ -1,5 +1,5 @@
 import { NavLink, Link, Outlet } from 'react-router-dom';
-import { ArrowLeft, Dumbbell, Utensils, LineChart, ScanLine, Settings2 } from 'lucide-react';
+import { Home, Dumbbell, Utensils, LineChart, ScanLine, Settings2, ScanSearch } from 'lucide-react';
 import { FitnessProvider, useFitness } from './FitnessProvider';
 import RestTimerBar from './RestTimerBar';
 
@@ -16,20 +16,24 @@ function Shell() {
   return (
     <div className="f-root">
       <header className="f-top">
-        <Link to="/home" className="inline-flex items-center gap-1.5 text-xs font-semibold f-muted hover:text-white" data-testid="back-to-portfolio">
-          <ArrowLeft className="h-4 w-4" /> Portfolio
+        <Link to="/" className="f-btn" style={{ minHeight: 34, padding: '0 11px', fontSize: 12 }} data-testid="back-to-portfolio" aria-label="Back to the portfolio home page">
+          <Home className="h-4 w-4" /> Portfolio
         </Link>
         <span className="flex items-center gap-2 text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
           <Dumbbell className="h-4 w-4 f-accent" /> Fitness
         </span>
-        <span className="w-[104px] whitespace-nowrap text-right">
-          {seeded && (
-            <Link to="/fitness/more" className="rounded-full border px-2 py-0.5 text-[10px] font-bold f-accent" style={{ borderColor: 'var(--f-accent)' }} data-testid="sample-pill">
-              Sample data
-            </Link>
-          )}
-        </span>
+        <Link to="/demo" className="f-btn" style={{ minHeight: 34, padding: '0 11px', fontSize: 12 }} data-testid="to-demo" aria-label="Open the computer vision demo">
+          <ScanSearch className="h-4 w-4" /> CV Demo
+        </Link>
       </header>
+      {seeded && (
+        <div className="mx-auto flex max-w-[880px] items-center justify-between gap-3 px-4 pt-3 text-[11px]" data-testid="sample-banner">
+          <span className="f-muted">Showing sample data.</span>
+          <Link to="/fitness/more" className="font-bold f-accent hover:underline" data-testid="sample-pill">
+            Start fresh or reset
+          </Link>
+        </div>
+      )}
 
       <main className="f-main">
         {status === 'loading' && <p className="f-small" data-testid="fitness-loading">Opening your training log…</p>}

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Download, Upload } from 'lucide-react';
-import { MAX_BACKUP_BYTES, db, exportBackup, importBackup, nutritionCsv, weightsCsv, workoutsCsv } from '../../utils/fitnessDb';
+import { MAX_BACKUP_BYTES, MAX_CSV_BYTES, db, exportBackup, importBackup, importCsv, nutritionCsv, weightsCsv, workoutsCsv } from '../../utils/fitnessDb';
 import { downloadTextFile } from '../../utils/yoloLabels';
 import { Unit, toISODate } from '../../utils/fitness';
 
@@ -9,6 +9,7 @@ type Notify = (type: 'success' | 'error' | 'info', message: string) => void;
 /** Export everything as JSON or CSV, and restore from a JSON backup. All of it happens in the browser. */
 export default function BackupPanel({ unit, notify }: { unit: Unit; notify: Notify }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const csvRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const stamp = toISODate();
 
@@ -50,10 +51,30 @@ export default function BackupPanel({ unit, notify }: { unit: Unit; notify: Noti
     }
   };
 
+  const onCsv = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > MAX_CSV_BYTES) {
+      notify('error', `That CSV is ${(file.size / 1048576).toFixed(1)} MB; the limit is ${MAX_CSV_BYTES / 1048576} MB.`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await importCsv(await file.text());
+      notify('success', `Added ${r.added} ${r.kind === 'weight' ? 'weigh-ins' : r.kind === 'nutrition' ? 'meals' : 'sessions'} from CSV${r.skipped ? ` (${r.skipped} skipped: duplicates or unreadable rows)` : ''}.`);
+    } catch (e: any) {
+      notify('error', e?.message || 'Could not import that CSV.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="f-card space-y-3" data-testid="backup-card">
       <h2 className="f-h">Backup &amp; export</h2>
-      <p className="f-small">Your data lives only in this browser. Download a backup now and then, and use it to move to another device.</p>
+      <p className="f-small">
+        Your data lives only in this browser. Download a backup now and then, and use it to move to another device. Restoring a JSON backup
+        replaces everything; importing a CSV adds to what you have.
+      </p>
       <div className="flex flex-wrap gap-2">
         <button type="button" className="f-btn-primary" data-testid="export-json" onClick={() => void exportJson()}>
           <Download className="h-4 w-4" /> Backup (JSON)
@@ -72,6 +93,10 @@ export default function BackupPanel({ unit, notify }: { unit: Unit; notify: Noti
         </button>
         <button type="button" className="f-btn" onClick={() => void exportCsv('weight')}>
           Body weight CSV
+        </button>
+        <input ref={csvRef} type="file" accept=".csv,text/csv" className="hidden" data-testid="import-csv-input" onChange={(e) => { void onCsv(e.target.files?.[0]); e.target.value = ''; }} />
+        <button type="button" className="f-btn" disabled={busy} data-testid="import-csv" onClick={() => csvRef.current?.click()}>
+          <Upload className="h-4 w-4" /> Import CSV
         </button>
       </div>
     </section>

@@ -329,6 +329,44 @@ export function toCSV(rows: readonly (readonly (string | number)[])[]): string {
   return rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n';
 }
 
+/**
+ * Parse CSV text (RFC 4180: quoted cells, doubled quotes, newlines inside quotes)
+ * into rows of strings. Undoes the leading ' that toCSV adds to cells a
+ * spreadsheet could read as a formula. Skips fully empty lines.
+ */
+export function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let quoted = false;
+  const src = text.replace(/^\uFEFF/, '');
+  const endCell = () => {
+    row.push(/^'[=+\-@\t\r]/.test(cell) ? cell.slice(1) : cell);
+    cell = '';
+  };
+  const endRow = () => {
+    endCell();
+    if (row.some((c) => c !== '')) rows.push(row);
+    row = [];
+  };
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else quoted = false;
+      } else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') endCell();
+    else if (ch === '\n') endRow();
+    else if (ch !== '\r') cell += ch;
+  }
+  if (cell !== '' || row.length) endRow();
+  return rows;
+}
+
 /** An SVG path through values, scaled to fit width x height with padding. */
 export function linePath(values: readonly number[], width: number, height: number, pad = 4, min?: number, max?: number): string {
   if (values.length === 0) return '';

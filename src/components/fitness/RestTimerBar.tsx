@@ -5,7 +5,8 @@ import { useFitness } from './FitnessProvider';
 /** A short beep and a buzz when rest is over. Both are best-effort: no sound permission or vibration motor is fine. */
 function alertDone() {
   try {
-    navigator.vibrate?.([200, 100, 200]);
+    // Browsers block vibration until the page has had a tap or key press.
+    if ((navigator as any).userActivation?.hasBeenActive !== false) navigator.vibrate?.([200, 100, 200]);
   } catch {
     // Not supported.
   }
