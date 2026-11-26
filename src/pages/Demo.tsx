@@ -52,8 +52,13 @@ import {
   parseConfig,
   sameConfig,
 } from '../utils/browserModels';
-import { Video, FileText } from 'lucide-react';
+import { Video, FileText, Lock } from 'lucide-react';
 import { baseName, downloadTextFile, toYoloText } from '../utils/yoloLabels';
+import { toCoco } from '../utils/labelExport';
+import { isLabPro } from '../utils/entitlements';
+import { useEntitlements } from '../utils/useEntitlements';
+import { useUnlockUi } from '../components/pro/EntitlementProvider';
+import LabTierStrip from '../components/pro/LabTierStrip';
 
 interface DemoProps {
   onNotify: (type: 'success' | 'error' | 'info', message: string) => void;
@@ -70,6 +75,8 @@ const SIZE_STORAGE_KEY = 'farai_cv_browser_size';
 export default function Demo({ onNotify }: DemoProps) {
   const [searchParams] = useSearchParams();
 
+  const labPro = isLabPro(useEntitlements());
+  const { openLabUnlock } = useUnlockUi();
   // High-level modality: Image vs Video
   const [mediaMode, setMediaMode] = useState<'image' | 'video'>('image');
 
@@ -566,6 +573,18 @@ export default function Demo({ onNotify }: DemoProps) {
     );
   };
 
+  // COCO JSON for the image on screen: Pro / Batch Studio (YOLO .txt above stays free).
+  const handleExportCoco = () => {
+    if (!labPro) return openLabUnlock('COCO export is part of Pro / Batch Studio. YOLO .txt export stays free.');
+    if (!detectionResult?.raw_detections || !detectionResult.class_names) return;
+    const w = detectionResult.image_width ?? imageMetadata?.width ?? 0;
+    const h = detectionResult.image_height ?? imageMetadata?.height ?? 0;
+    const name = `${baseName(currentFile?.name || activeSampleId || 'image')}.coco.json`;
+    const coco = toCoco([{ fileName: currentFile?.name || 'image.jpg', width: w, height: h, boxes: detectionResult.raw_detections }], detectionResult.class_names);
+    downloadTextFile(name, JSON.stringify(coco, null, 2), 'application/json');
+    onNotify('success', `Exported ${coco.annotations.length} annotation(s) to ${name} (COCO category ids are 1-based).`);
+  };
+
   const handleDownloadAnnotated = () => {
     if (!detectionResult?.annotated_image_base64) return;
     const link = document.createElement('a');
@@ -725,6 +744,8 @@ export default function Demo({ onNotify }: DemoProps) {
         </div>
       </div>
 
+      <LabTierStrip />
+
       {/* VIDEO SUITE VIEW */}
       {mediaMode === 'video' ? (
         <VideoProcessor
@@ -826,7 +847,7 @@ export default function Demo({ onNotify }: DemoProps) {
               </div>
               <p className="text-[11px] text-neutral-500">
                 {engine === 'browser'
-                  ? 'Images and video files. Batch and comparison always use the backend.'
+                  ? 'Images, batches and video files run on this device. Comparison always uses the backend.'
                   : 'Needs the backend server. No server? Run it in your browser instead.'}
               </p>
             </div>
@@ -1107,6 +1128,14 @@ export default function Demo({ onNotify }: DemoProps) {
               >
                 <FileText className="h-3.5 w-3.5" /> Export YOLO Labels (.txt)
               </button>
+              <button
+                type="button"
+                data-testid="export-coco"
+                onClick={handleExportCoco}
+                className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-neutral-700 px-3.5 py-1.5 font-semibold text-neutral-200 hover:border-neutral-500"
+              >
+                {labPro ? <FileText className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5 text-amber-300" />} Export COCO JSON{labPro ? '' : ' (Pro)'}
+              </button>
               <span className="text-neutral-500">
                 {detectionResult.raw_detections.length} box(es) at {Math.round(confidenceThreshold * 100)}% confidence · class 0 ={' '}
                 {detectionResult.class_names?.[0] ?? '—'}
@@ -1152,6 +1181,10 @@ export default function Demo({ onNotify }: DemoProps) {
           confidenceThreshold={confidenceThreshold}
           onNotify={onNotify}
           onExpandFullscreen={(src, title) => setFullscreenImage({ src, title })}
+          engine={engine}
+          modelConfig={browserModelCfg}
+          isPro={labPro}
+          onRequestUpgrade={openLabUnlock}
         />
       )}
 

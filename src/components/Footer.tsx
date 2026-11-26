@@ -106,7 +106,12 @@ export default function Footer() {
 
         {/* Bottom Bar */}
         <div className="mt-10 border-t border-[#16213E] pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-[#888888] gap-4">
-          <p>© {new Date().getFullYear()} Farai Bodias Musariri. Built with React & Tailwind CSS.</p>
+          <p>
+            © {new Date().getFullYear()} Farai Bodias Musariri. Built with React & Tailwind CSS.{' '}
+            <Link to="/privacy" className="underline-offset-2 hover:text-[#32FF00] hover:underline" data-testid="footer-privacy">
+              Privacy
+            </Link>
+          </p>
           <div className="flex items-center gap-2">
             <span className="font-mono text-[11px] text-[#32FF00]">MSc Research Edition</span>
             <span>·</span>

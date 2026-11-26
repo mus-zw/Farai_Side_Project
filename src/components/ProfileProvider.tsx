@@ -60,7 +60,9 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   // Persist every change. A browser with storage blocked just forgets on reload.
   useEffect(() => {
     try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+      // An empty profile is not worth a storage entry (and "delete my data" should leave nothing behind).
+      if (!profile.signedIn && !profile.name && profile.interests.length === 0) localStorage.removeItem(PROFILE_KEY);
+      else localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
     } catch {
       // Not persisting is fine.
     }

@@ -3,6 +3,10 @@ import { Home, Dumbbell, Utensils, LineChart, ScanLine, UserRound } from 'lucide
 import { FitnessProvider, useFitness } from './FitnessProvider';
 import RestTimerBar from './RestTimerBar';
 import Onboarding from './Onboarding';
+import SiteLink from '../SiteLink';
+import { isStandalone, linkTo } from '../../utils/site';
+import { fitnessStatus } from '../../utils/entitlements';
+import { useEntitlements } from '../../utils/useEntitlements';
 
 const TABS = [
   { to: '/fitness', label: 'Train', Icon: Dumbbell, end: true },
@@ -24,13 +28,23 @@ const TITLES: Record<string, string> = {
 function AppBar() {
   const { athlete } = useFitness();
   const { pathname } = useLocation();
+  const pro = fitnessStatus(useEntitlements()).active;
   const title = TITLES[pathname.replace(/\/+$/, '') || '/fitness'] ?? 'Fitness';
+  // A standalone fitness site with no hub URL configured has no portfolio to go back to.
+  const hub = linkTo('hub');
+  const hasHub = !isStandalone || hub.external;
 
   return (
     <header className="f-top">
-      <Link to="/" className="f-btn" style={{ minHeight: 36, padding: '0 12px', fontSize: 12 }} data-testid="back-to-portfolio" aria-label="Back to the portfolio home page">
-        <Home className="h-4 w-4" /> Portfolio
-      </Link>
+      {hasHub ? (
+        <SiteLink to={hub} className="f-btn" style={{ minHeight: 36, padding: '0 12px', fontSize: 12 }} data-testid="back-to-portfolio" aria-label="Back to the portfolio home page">
+          <Home className="h-4 w-4" /> Portfolio
+        </SiteLink>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold f-muted" data-testid="brand-mark">
+          <Dumbbell className="h-4 w-4 f-accent" /> Fitness
+        </span>
+      )}
       <h1 className="f-title" data-testid="view-title">
         {title}
       </h1>
@@ -40,6 +54,7 @@ function AppBar() {
             {athlete.name.charAt(0).toUpperCase()}
           </span>
           {athlete.mode === 'guest' ? <span className="f-guesttag">Guest</span> : <span className="f-athlete-name">{athlete.name}</span>}
+          {pro && <span className="f-guesttag" style={{ color: 'var(--f-accent)', borderColor: 'var(--f-accent)' }} data-testid="pro-badge">Pro</span>}
         </Link>
       ) : (
         <span />

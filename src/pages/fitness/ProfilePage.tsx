@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import SiteLink from '../../components/SiteLink';
+import { useConsent } from '../../components/ConsentProvider';
+import { useUnlockUi } from '../../components/pro/EntitlementProvider';
+import { useEntitlements } from '../../utils/useEntitlements';
+import { FITNESS_PLAN_LABEL, fitnessStatus } from '../../utils/entitlements';
+import { hasConsent } from '../../utils/consent';
+import EngineeredBy from '../../components/EngineeredBy';
+import { isStandalone, linkTo } from '../../utils/site';
 import { ArrowLeft, ScanSearch, UserCircle2 } from 'lucide-react';
 import { SCHEDULE_LABEL, Schedule, Unit, MAX_ATHLETE_NAME, cleanAthleteName, num } from '../../utils/fitness';
 import { renameAthlete, resetEverything, seedSampleData, startFresh } from '../../utils/fitnessDb';
@@ -12,6 +20,9 @@ const REST_PRESETS = [60, 90, 120, 180];
 export default function ProfilePage() {
   const { settings, updateSettings, seeded, athlete, notify } = useFitness();
   const { openProfile } = useProfile();
+  const { openFitnessPro } = useUnlockUi();
+  const { record, revoke } = useConsent();
+  const plan = fitnessStatus(useEntitlements());
   const [name, setName] = useState(athlete?.name ?? '');
   useEffect(() => setName(athlete?.name ?? ''), [athlete?.name]);
   if (!athlete) return null;
@@ -55,6 +66,26 @@ export default function ProfilePage() {
             Save
           </button>
         </form>
+      </section>
+
+      <section className="f-card space-y-3" data-testid="plan-card">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="f-h">Your plan</h2>
+            <p className="f-small" data-testid="plan-status">
+              {plan.active ? `${FITNESS_PLAN_LABEL[plan.plan!]}${plan.daysLeft ? ` · ${plan.daysLeft} days left` : ''}` : 'Free'}
+            </p>
+          </div>
+          {plan.active && <span className="f-guesttag" style={{ color: 'var(--f-accent)', borderColor: 'var(--f-accent)' }}>Pro</span>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="f-btn-primary" data-testid="open-pro" onClick={() => openFitnessPro('solo')}>
+            {plan.active ? 'Manage plan' : 'Upgrade to Pro'}
+          </button>
+          <button type="button" className="f-btn" data-testid="open-pilot" onClick={() => openFitnessPro('pilot')}>
+            Trainer / Biokineticist pilot
+          </button>
+        </div>
       </section>
 
       <section className="f-card space-y-4" data-testid="plan-settings">
@@ -174,20 +205,41 @@ export default function ProfilePage() {
 
       <BackupPanel unit={settings.unit} notify={notify} />
 
+      <section className="f-card space-y-3" data-testid="privacy-card">
+        <h2 className="f-h">Privacy</h2>
+        <p className="f-small">
+          The Form Coach runs entirely in your browser. No video, frames or body keypoints are uploaded or saved. Camera consent:{' '}
+          <strong style={{ color: 'var(--f-text)' }} data-testid="profile-consent-status">{hasConsent(record, 'local') ? 'given' : 'not given'}</strong>.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="f-btn" disabled={!record} data-testid="profile-withdraw-consent" onClick={() => { revoke(); notify('info', 'Camera consent withdrawn. You will be asked again before the camera starts.'); }}>
+            Withdraw camera consent
+          </button>
+          <Link to="/privacy" className="f-btn" data-testid="profile-privacy-link">
+            Privacy details
+          </Link>
+        </div>
+      </section>
+
       <section className="f-card space-y-3" data-testid="elsewhere-card">
         <h2 className="f-h">Elsewhere</h2>
         <div className="flex flex-wrap gap-2">
-          <Link to="/" className="f-btn" data-testid="more-portfolio">
-            <ArrowLeft className="h-4 w-4" /> Portfolio
-          </Link>
-          <Link to="/demo" className="f-btn" data-testid="to-demo">
-            <ScanSearch className="h-4 w-4" /> CV Demo
-          </Link>
+          {(!isStandalone || linkTo('hub').external) && (
+            <SiteLink to={linkTo('hub')} className="f-btn" data-testid="more-portfolio">
+              <ArrowLeft className="h-4 w-4" /> Portfolio
+            </SiteLink>
+          )}
+          {(!isStandalone || linkTo('lab').external) && (
+            <SiteLink to={linkTo('lab')} className="f-btn" data-testid="to-demo">
+              <ScanSearch className="h-4 w-4" /> CV Auto-Labeler
+            </SiteLink>
+          )}
           <button type="button" className="f-btn" onClick={openProfile}>
             <UserCircle2 className="h-4 w-4" /> Site profile &amp; interests
           </button>
         </div>
       </section>
+      <EngineeredBy className="pb-2 text-center f-muted" />
     </div>
   );
 }

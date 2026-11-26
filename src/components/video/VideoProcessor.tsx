@@ -22,6 +22,8 @@ import { activeCountsByClass, overlayAtTime } from '../../utils/videoOverlay';
 import VideoUpload from './VideoUpload';
 import BrowserVideoDetector from './BrowserVideoDetector';
 import type { InferenceEngine } from '../../services/visionApi';
+import { useConsent } from '../ConsentProvider';
+import { getApiBaseUrl } from '../../services/apiClient';
 import VideoPlayer from './VideoPlayer';
 import VideoTimeline from './VideoTimeline';
 import FrameAnalysis from './FrameAnalysis';
@@ -73,6 +75,7 @@ export default function VideoProcessor({
   confidenceThreshold = 0.25,
   onConfidenceChange,
 }: VideoProcessorProps) {
+  const { ensure } = useConsent();
   const [videoFile, setVideoFile] = useState<File | Blob | null>(null);
   const [videoMetadata, setVideoMetadata] = useState<VideoMetadata | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -114,6 +117,9 @@ export default function VideoProcessor({
 
   const handleStartProcessing = async (options: VideoProcessingOptions) => {
     if (!videoFile || !videoMetadata) return;
+
+    // This path uploads the video to the backend, so it needs its own, plainly worded consent.
+    if (!(await ensure('upload', { uploadHost: getApiBaseUrl() }))) return;
 
     setIsProcessing(true);
     setUploadPercent(0);

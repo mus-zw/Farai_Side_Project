@@ -13,3 +13,7 @@ venv/
 __pycache__/
 *.pt
 logs/
+
+# License signing keys must never be committed
+license-private*.json
+*.jwk.json

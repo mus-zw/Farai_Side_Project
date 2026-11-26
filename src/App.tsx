@@ -14,7 +14,12 @@ import ProgressPage from './pages/fitness/ProgressPage';
 import CoachPage from './pages/fitness/CoachPage';
 import ProfilePage from './pages/fitness/ProfilePage';
 import { ProfileProvider } from './components/ProfileProvider';
+import { ConsentProvider } from './components/ConsentProvider';
+import { EntitlementProvider } from './components/pro/EntitlementProvider';
 import ProfileModal from './components/ProfileModal';
+import SpokeLayout from './components/SpokeLayout';
+import Privacy from './pages/Privacy';
+import { APP_MODE } from './utils/site';
 
 /**
  * Handles smooth scrolling on navigation:
@@ -57,44 +62,73 @@ export default function App() {
   return (
     <ProfileProvider>
     <BrowserRouter>
+    <ConsentProvider>
+    <EntitlementProvider>
       <ScrollHandler />
       <div className="flex min-h-screen flex-col bg-[#0F1419] text-[#CCCCCC] font-sans selection:bg-[#32FF00] selection:text-[#0F1419]">
         <Routes>
-          {/* The fitness area has its own layout: no portfolio navbar or footer. */}
-          <Route path="/fitness" element={<FitnessLayout onNotify={addNotification} />}>
-            <Route index element={<TrainPage />} />
-            <Route path="nutrition" element={<NutritionPage />} />
-            <Route path="progress" element={<ProgressPage />} />
-            <Route path="coach" element={<CoachPage />} />
-            <Route path="profile" element={<ProfilePage />} />
-            {/* The old name for the profile screen. */}
-            <Route path="more" element={<Navigate to="/fitness/profile" replace />} />
-          </Route>
+          {/* The fitness area is its own app: no portfolio navbar or footer. */}
+          {APP_MODE !== 'lab' && (
+            <Route path="/fitness" element={<FitnessLayout onNotify={addNotification} />}>
+              <Route index element={<TrainPage />} />
+              <Route path="nutrition" element={<NutritionPage />} />
+              <Route path="progress" element={<ProgressPage />} />
+              <Route path="coach" element={<CoachPage />} />
+              <Route path="profile" element={<ProfilePage />} />
+              {/* The old name for the profile screen. */}
+              <Route path="more" element={<Navigate to="/fitness/profile" replace />} />
+            </Route>
+          )}
 
-          <Route
-            element={
-              <>
-                <Navbar />
-                <main className="flex-1">
-                  <Outlet />
-                </main>
-                <Footer />
-              </>
-            }
-          >
-            <Route path="/" element={<Home />} />
-            <Route path="/home" element={<Home />} />
-            <Route path="/demo" element={<Demo onNotify={addNotification} />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/contact" element={<Contact onNotify={addNotification} />} />
-            {/* Fallback route */}
-            <Route path="*" element={<Home />} />
-          </Route>
+          {APP_MODE === 'hub' && (
+            <Route
+              element={
+                <>
+                  <Navbar />
+                  <main className="flex-1">
+                    <Outlet />
+                  </main>
+                  <Footer />
+                </>
+              }
+            >
+              <Route path="/" element={<Home />} />
+              <Route path="/home" element={<Home />} />
+              <Route path="/demo" element={<Demo onNotify={addNotification} />} />
+              <Route path="/about" element={<About />} />
+              <Route path="/contact" element={<Contact onNotify={addNotification} />} />
+              <Route path="/privacy" element={<Privacy />} />
+              {/* Fallback route */}
+              <Route path="*" element={<Home />} />
+            </Route>
+          )}
+
+          {/* Standalone Auto-Labeler (lab.<domain>): `/` is the tool. */}
+          {APP_MODE === 'lab' && (
+            <Route element={<SpokeLayout title="CV Auto-Labeler" />}>
+              <Route path="/" element={<Navigate to="/demo" replace />} />
+              <Route path="/demo" element={<Demo onNotify={addNotification} />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="*" element={<Navigate to="/demo" replace />} />
+            </Route>
+          )}
+
+          {/* Standalone fitness app: `/` is the app. */}
+          {APP_MODE === 'fitness' && (
+            <>
+              <Route element={<SpokeLayout title="Fitness" />}>
+                <Route path="/privacy" element={<Privacy />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/fitness" replace />} />
+            </>
+          )}
         </Routes>
 
         <ProfileModal />
         <Toast toasts={toasts} onDismiss={dismissNotification} />
       </div>
+    </EntitlementProvider>
+    </ConsentProvider>
     </BrowserRouter>
     </ProfileProvider>
   );

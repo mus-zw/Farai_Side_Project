@@ -20,6 +20,9 @@ import {
 import { DEFAULT_SAMPLE } from '../utils/sampleData';
 import SkillsSection from '../components/SkillsSection';
 import InterestShortcuts from '../components/InterestShortcuts';
+import EngineeringSection from '../components/hub/EngineeringSection';
+import CaseStudies from '../components/hub/CaseStudies';
+import WorkWithMe from '../components/hub/WorkWithMe';
 
 export default function Home() {
   const sample = DEFAULT_SAMPLE; // a scene COCO models handle well; real output comes only from /demo
@@ -266,6 +269,11 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Hub: engineering authority, live case studies, and intake */}
+      <EngineeringSection />
+      <CaseStudies />
+      <WorkWithMe />
 
       {/* 4. Technical Skills Section */}
       <section id="skills" className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 scroll-mt-24 space-y-10">

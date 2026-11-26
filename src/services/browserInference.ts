@@ -12,6 +12,7 @@ import {
   Detection,
 } from '../utils/onnxDetect';
 import { layoutLabel, readableTextColor } from '../utils/videoOverlay';
+import { ORT_WASM_BASE_URL, modelFileUrl } from '../utils/modelUrls';
 import {
   BrowserModelConfig,
   DEFAULT_MODEL_CONFIG,
@@ -32,10 +33,10 @@ import {
  * this touches the app's initial bundle.
  */
 
-const BASE = import.meta.env.BASE_URL;
-export const modelUrl = (cfg: BrowserModelConfig) => `${BASE}models/${modelFileName(cfg)}`;
-// vite.config.ts serves/emits the runtime's wasm files here.
-const ORT_ASSET_BASE = `${BASE}ort/`;
+// Model files come from VITE_MODEL_BASE_URL (default /models); the runtime wasm from
+// VITE_ORT_WASM_BASE_URL (default: bundled at /ort/, see vite.config.ts and utils/modelUrls.ts).
+export const modelUrl = (cfg: BrowserModelConfig) => modelFileUrl(modelFileName(cfg));
+const ORT_ASSET_BASE = ORT_WASM_BASE_URL;
 /** Larger images are downscaled before inference; the model only sees 640 px anyway. */
 export const MAX_BROWSER_IMAGE_DIM = 4096;
 

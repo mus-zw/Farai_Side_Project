@@ -3,6 +3,8 @@ import type { PoseLandmarker } from '@mediapipe/tasks-vision';
 import { AlertTriangle, Camera, Film, Square, Download, RotateCcw } from 'lucide-react';
 import { EXERCISES, CoachExercise, FormTracker, FrameMetrics, Landmark, PoseSmoother, RepResult, frameMetrics } from '../../utils/poseMath';
 import { downloadTextFile } from '../../utils/yoloLabels';
+import { MEDIAPIPE_WASM_BASE_URL, poseModelUrl } from '../../utils/modelUrls';
+import { useConsent } from '../ConsentProvider';
 
 /**
  * Client-side form coach: MediaPipe Pose Landmarker on the camera (or a video
@@ -15,9 +17,10 @@ import { downloadTextFile } from '../../utils/yoloLabels';
 type Variant = 'full' | 'lite';
 type Status = 'idle' | 'starting' | 'running';
 
-const BASE = import.meta.env.BASE_URL;
-const WASM_BASE = `${BASE}mediapipe/wasm`;
-const localModelUrl = (v: Variant) => `${BASE}models/pose/pose_landmarker_${v}.task`;
+// The runtime wasm and the .task files come from env-configurable bases (utils/modelUrls.ts), so a
+// static host with a per-file size limit can serve them from object storage instead.
+const WASM_BASE = MEDIAPIPE_WASM_BASE_URL;
+const localModelUrl = (v: Variant) => poseModelUrl(v);
 const remoteModelUrl = (v: Variant) =>
   `https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_${v}/float16/latest/pose_landmarker_${v}.task`;
 
@@ -54,6 +57,7 @@ function cameraErrorMessage(err: any): string {
 const QUALITY_COLOR = { good: 'var(--f-good)', ok: 'var(--f-gold)', poor: 'var(--f-bad)' } as const;
 
 export default function FormCoach() {
+  const { ensure } = useConsent();
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
@@ -286,6 +290,8 @@ export default function FormCoach() {
   }, [clearOverlay, draw, stop]);
 
   const begin = async (kind: 'camera' | 'file', file?: File, allowRemote = false) => {
+    // Nothing starts (no model download, no camera prompt) until the visitor has agreed.
+    if (!(await ensure('local'))) return;
     setError('');
     setModelMissing(false);
     stop();

@@ -127,6 +127,8 @@ export interface BatchItem {
     annotatedImage: string;
     modelName: string;
     detections: Record<string, DetectionScoreBreakdown>;
+    /** In-browser runs only: boxes with class ids, for YOLO / COCO dataset export. */
+    labels?: { boxes: { classId: number; box: [number, number, number, number]; score: number }[]; classNames: string[]; width: number; height: number };
   };
   error?: string;
 }

@@ -14,9 +14,15 @@ import {
   Layers,
   Sparkles,
   X,
+  FolderOpen,
+  Lock,
 } from 'lucide-react';
 import { BatchItem } from '../types';
-import { detectObjects, validateAndExtractImageMetadata } from '../services/visionApi';
+import { detectObjects, validateAndExtractImageMetadata, type InferenceEngine } from '../services/visionApi';
+import type { BrowserModelConfig } from '../utils/browserModels';
+import { FREE_BATCH_LIMIT, batchAllowance } from '../utils/labTier';
+import { classesTxt, dataYaml, toCoco } from '../utils/labelExport';
+import { baseName, toYoloText } from '../utils/yoloLabels';
 import { formatBytes, capitalizeClass } from '../utils/formatters';
 import { getClassColor } from '../utils/colors';
 import { dataUrlBase64Payload, dataUrlExtension } from '../utils/dataUrl';
@@ -25,21 +31,40 @@ interface BatchUploadProps {
   confidenceThreshold: number;
   onNotify: (type: 'success' | 'error' | 'info', message: string) => void;
   onExpandFullscreen?: (src: string, title: string) => void;
+  /** Where each image is analysed. 'browser' keeps the whole batch on this device. */
+  engine?: InferenceEngine;
+  modelConfig?: BrowserModelConfig;
+  /** Pro / Batch Studio: unlimited batches, folders, and dataset export. */
+  isPro?: boolean;
+  onRequestUpgrade?: (reason: string) => void;
 }
 
 export default function BatchUpload({
   confidenceThreshold,
   onNotify,
   onExpandFullscreen,
+  engine,
+  modelConfig,
+  isPro = false,
+  onRequestUpgrade,
 }: BatchUploadProps) {
   const [items, setItems] = useState<BatchItem[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFilesAdded = async (fileList: FileList | File[]) => {
+  const handleFilesAdded = async (incoming: FileList | File[]) => {
     const newItems: BatchItem[] = [];
+
+    // The free sandbox batches a handful of images; Pro lifts the limit.
+    const { allowed, blocked } = batchAllowance(isPro, items.length, incoming.length);
+    const fileList = Array.from(incoming).slice(0, allowed);
+    if (blocked > 0) {
+      onNotify('info', `The free sandbox batches up to ${FREE_BATCH_LIMIT} images; ${blocked} not added.`);
+      onRequestUpgrade?.(`The free sandbox batches up to ${FREE_BATCH_LIMIT} images. Pro / Batch Studio removes the limit.`);
+    }
 
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
@@ -106,6 +131,8 @@ export default function BatchUpload({
           item.file,
           {
             confidenceThreshold,
+            engine,
+            modelConfig,
             onProgress: (p) => {
               setItems((prev) =>
                 prev.map((it, i) => (i === idx ? { ...it, progress: Math.min(95, p) } : it))
@@ -127,6 +154,10 @@ export default function BatchUpload({
                     annotatedImage: result.annotated_image_base64,
                     modelName: result.model_name,
                     detections: result.detections,
+                    labels:
+                      result.raw_detections && result.class_names
+                        ? { boxes: result.raw_detections.map((d) => ({ classId: d.classId, box: d.box, score: d.score })), classNames: result.class_names, width: result.image_width ?? 0, height: result.image_height ?? 0 }
+                        : undefined,
                   },
                 }
               : it
@@ -155,6 +186,44 @@ export default function BatchUpload({
   };
 
   // Export batch results as a ZIP archive
+  /**
+   * A ready-to-train dataset: the ORIGINAL images, a YOLO label file per image, classes.txt,
+   * data.yaml and one COCO JSON. Built in the browser from this batch's in-browser results.
+   */
+  const handleDownloadDataset = async () => {
+    if (!isPro) return onRequestUpgrade?.('Dataset export (YOLO + COCO) is part of Pro / Batch Studio.');
+    const done = items.filter((i) => i.status === 'done' && i.result?.labels);
+    if (done.length === 0) {
+      return onNotify('error', 'Dataset export needs results from "In this browser" mode (it has the class ids and pixel boxes). Switch the engine and re-run the batch.');
+    }
+    const classNames = done[0].result!.labels!.classNames;
+    const zip = new JSZip();
+    const used = new Set<string>();
+    const coco = done.map((item, idx) => {
+      const ext = (item.file.name.match(/\.[^./\\]+$/)?.[0] ?? '.jpg').toLowerCase();
+      let stem = baseName(item.file.name);
+      if (used.has(stem)) stem = `${stem}_${idx + 1}`;
+      used.add(stem);
+      const { boxes, width, height } = item.result!.labels!;
+      zip.file(`images/${stem}${ext}`, item.file);
+      zip.file(`labels/${stem}.txt`, toYoloText(boxes, width, height));
+      return { fileName: `${stem}${ext}`, width, height, boxes };
+    });
+    zip.file('classes.txt', classesTxt(classNames));
+    zip.file('data.yaml', dataYaml(classNames));
+    zip.file('annotations_coco.json', JSON.stringify(toCoco(coco, classNames), null, 2));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `farai-cv-dataset-${Date.now()}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    onNotify('success', `Dataset exported: ${done.length} images with YOLO labels and COCO JSON.`);
+  };
+
   const handleDownloadBatchZip = async () => {
     const doneItems = items.filter((i) => i.status === 'done' && i.result?.annotatedImage);
     if (doneItems.length === 0) {
@@ -245,6 +314,19 @@ export default function BatchUpload({
           className="hidden"
           id="batch-image-upload"
         />
+        {/* Pro: pick a whole folder. Only images are taken; subfolders are flattened. */}
+        <input
+          ref={folderInputRef}
+          type="file"
+          multiple
+          {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+          onChange={(e) => {
+            if (e.target.files) handleFilesAdded(Array.from(e.target.files).filter((f) => /^image\/(png|jpe?g|webp)$/.test(f.type)));
+            e.target.value = '';
+          }}
+          className="hidden"
+          data-testid="batch-folder-input"
+        />
 
         <div className="mx-auto flex max-w-lg flex-col items-center justify-center space-y-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-800 text-[#32FF00] shadow-inner">
@@ -264,6 +346,19 @@ export default function BatchUpload({
             <p className="text-xs text-neutral-400">
               High-throughput sequential pipeline with automated ZIP package generation
             </p>
+            <button
+              type="button"
+              data-testid="batch-folder-button"
+              onClick={() => (isPro ? folderInputRef.current?.click() : onRequestUpgrade?.('Choosing a whole folder is part of Pro / Batch Studio.'))}
+              className="mt-1 inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-neutral-700 px-3.5 text-xs font-semibold text-neutral-200 hover:border-neutral-500"
+            >
+              {isPro ? <FolderOpen className="h-3.5 w-3.5 text-[#32FF00]" /> : <Lock className="h-3.5 w-3.5 text-amber-300" />} Choose a folder{isPro ? '' : ' (Pro)'}
+            </button>
+            {!isPro && (
+              <p className="text-[11px] text-neutral-500" data-testid="batch-limit-note">
+                Free sandbox: up to {FREE_BATCH_LIMIT} images per batch ({items.length}/{FREE_BATCH_LIMIT} queued).
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -316,6 +411,20 @@ export default function BatchUpload({
               >
                 <Download className="h-4 w-4 text-[#32FF00]" />
                 <span>Download All (ZIP)</span>
+              </button>
+            )}
+
+            {completedCount > 0 && (
+              <button
+                type="button"
+                data-testid="batch-dataset-zip"
+                onClick={handleDownloadDataset}
+                disabled={isProcessing}
+                className="min-h-[42px] inline-flex items-center gap-2 rounded-xl bg-neutral-800 border border-neutral-700 px-4 py-2 text-xs font-semibold text-white hover:bg-neutral-700 transition-colors"
+                title="Original images with YOLO labels, COCO JSON and data.yaml"
+              >
+                {isPro ? <Download className="h-4 w-4 text-[#32FF00]" /> : <Lock className="h-4 w-4 text-amber-300" />}
+                <span>Dataset ZIP (YOLO + COCO){isPro ? '' : ' · Pro'}</span>
               </button>
             )}
 

@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import SiteLink from '../SiteLink';
+import EngineeredBy from '../EngineeredBy';
+import { isStandalone, linkTo } from '../../utils/site';
 import { Dumbbell, Home, Sparkles } from 'lucide-react';
 import { SCHEDULE_LABEL, Schedule, Unit, deriveTargets, MAX_ATHLETE_NAME, cleanAthleteName, num } from '../../utils/fitness';
 import { completeOnboarding, continueAsGuest } from '../../utils/fitnessDb';
@@ -59,9 +62,13 @@ export default function Onboarding() {
   return (
     <div className="mx-auto max-w-md space-y-5 pb-10" data-testid="onboarding">
       <div className="flex items-center justify-between">
-        <Link to="/" className="f-btn" style={{ minHeight: 34, padding: '0 11px', fontSize: 12 }} data-testid="onboarding-portfolio">
-          <Home className="h-4 w-4" /> Portfolio
-        </Link>
+        {!isStandalone || linkTo('hub').external ? (
+          <SiteLink to={linkTo('hub')} className="f-btn" style={{ minHeight: 34, padding: '0 11px', fontSize: 12 }} data-testid="onboarding-portfolio">
+            <Home className="h-4 w-4" /> Portfolio
+          </SiteLink>
+        ) : (
+          <span />
+        )}
         <span className="flex items-center gap-1.5 text-xs font-bold f-muted">
           <Dumbbell className="h-4 w-4 f-accent" /> Fitness
         </span>
@@ -159,6 +166,7 @@ export default function Onboarding() {
         </button>
         <p className="f-small">Fills the app with made-up history so you can try every screen. You can start fresh any time.</p>
       </div>
+      <EngineeredBy className="text-center f-muted" />
     </div>
   );
 }

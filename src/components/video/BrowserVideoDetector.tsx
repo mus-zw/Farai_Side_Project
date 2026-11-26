@@ -1,9 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Upload, Play, Square, AlertTriangle, FileText } from 'lucide-react';
+import JSZip from 'jszip';
+import { Upload, Play, Square, AlertTriangle, FileText, Lock, Images } from 'lucide-react';
 import ConfidenceSlider from '../ConfidenceSlider';
 import { classColorHex, Detection } from '../../utils/onnxDetect';
 import { layoutLabel, readableTextColor } from '../../utils/videoOverlay';
 import { baseName, downloadTextFile, toYoloText } from '../../utils/yoloLabels';
+import { useConsent } from '../ConsentProvider';
+import { isLabPro } from '../../utils/entitlements';
+import { useEntitlements } from '../../utils/useEntitlements';
+import { useUnlockUi } from '../pro/EntitlementProvider';
+import { classesTxt, dataYaml, toCoco, type LabeledImage } from '../../utils/labelExport';
 
 /**
  * Video detection that runs entirely in this browser: the chosen file is played
@@ -48,6 +54,12 @@ const fmtMB = (b: number) => `${(b / 1048576).toFixed(1)} MB`;
 const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 export default function BrowserVideoDetector({ confidenceThreshold, onConfidenceChange, onNotify }: Props) {
+  const { ensure } = useConsent();
+  const labPro = isLabPro(useEntitlements());
+  const { openLabUnlock } = useUnlockUi();
+  const [every, setEvery] = useState(1); // seconds between extracted frames
+  const [extract, setExtract] = useState<{ done: number; total: number } | null>(null);
+  const cancelExtractRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -247,6 +259,7 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
   const startDetection = async () => {
     const video = videoRef.current;
     if (!video || detectingRef.current) return;
+    if (!(await ensure('local'))) return; // consent first: nothing is analysed until the visitor agrees
     setError(null);
     generationRef.current += 1;
     const generation = generationRef.current;
@@ -412,6 +425,80 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
     onNotify('success', `Exported ${lastDetectionsRef.current.length} box(es) from this frame to ${name}.`);
   };
 
+  // --- Pro: extract frames + labels into a dataset ZIP ---------------------------------------
+
+  const extractFrames = async () => {
+    if (!labPro) return openLabUnlock('Video-frame extraction is part of Pro / Batch Studio.');
+    const video = videoRef.current;
+    if (!video || !fileInfo || extract) return;
+    if (!(await ensure('local'))) return;
+    if (detectingRef.current) stopDetection();
+    setError(null);
+    cancelExtractRef.current = false;
+
+    const MAX_FRAMES = 300;
+    const times: number[] = [];
+    for (let t = 0; t < fileInfo.seconds && times.length < MAX_FRAMES; t += every) times.push(t);
+    setExtract({ done: 0, total: times.length });
+
+    const seek = (t: number) =>
+      new Promise<void>((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error('Seeking timed out.')), 8000);
+        video.addEventListener('seeked', () => { window.clearTimeout(timer); resolve(); }, { once: true });
+        video.currentTime = Math.min(t, Math.max(0, video.duration - 0.05));
+      });
+
+    try {
+      video.pause();
+      const { detectFrameInBrowser, loadBrowserModel } = await import('../../services/browserInference');
+      await loadBrowserModel(setPhase);
+      setPhase('');
+      const zip = new JSZip();
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('This browser could not create a 2D canvas.');
+      const stem = baseName(fileNameRef.current);
+      const images: LabeledImage[] = [];
+      let classNames: readonly string[] = [];
+
+      for (let i = 0; i < times.length; i++) {
+        if (cancelExtractRef.current) throw new Error('Extraction canceled.');
+        await seek(times[i]);
+        const res = await detectFrameInBrowser(video, video.videoWidth, video.videoHeight, confidenceRef.current);
+        classNames = res.classNames;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const blob: Blob | null = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.92));
+        if (!blob) throw new Error('Could not encode a frame.');
+        const name = `${stem}_f${String(i + 1).padStart(4, '0')}`;
+        zip.file(`images/${name}.jpg`, blob);
+        zip.file(`labels/${name}.txt`, toYoloText(res.detections, res.width, res.height));
+        images.push({ fileName: `${name}.jpg`, width: res.width, height: res.height, boxes: res.detections });
+        setExtract({ done: i + 1, total: times.length });
+      }
+
+      zip.file('classes.txt', classesTxt(classNames));
+      zip.file('data.yaml', dataYaml(classNames));
+      zip.file('annotations_coco.json', JSON.stringify(toCoco(images, classNames, `Frames from ${fileNameRef.current}`), null, 2));
+      const out = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(out);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${stem}-frames-${Date.now()}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      onNotify('success', `Extracted ${images.length} frames with YOLO labels and COCO JSON. They were built in your browser and saved to your downloads only.`);
+    } catch (err: any) {
+      if (err?.message !== 'Extraction canceled.') setError(err?.message || 'Frame extraction failed.');
+      else onNotify('info', 'Frame extraction canceled.');
+    } finally {
+      setExtract(null);
+    }
+  };
+
   // --- Render ---------------------------------------------------------------------
 
   const classPills = Object.entries(stats.perClass).sort((a, b) => b[1] - a[1]);
@@ -535,6 +622,35 @@ export default function BrowserVideoDetector({ confidenceThreshold, onConfidence
               ))}
             </div>
           )}
+
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/50 p-3 text-xs" data-testid="frame-extraction">
+            <span className="font-semibold text-neutral-200">Frame extraction</span>
+            <label className="flex items-center gap-1.5 text-neutral-400">
+              every
+              <select className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-neutral-200" value={every} onChange={(e) => setEvery(Number(e.target.value))} aria-label="Seconds between frames" data-testid="extract-interval" disabled={Boolean(extract)}>
+                {[0.5, 1, 2, 5].map((s) => (
+                  <option key={s} value={s}>
+                    {s} s
+                  </option>
+                ))}
+              </select>
+            </label>
+            {extract ? (
+              <>
+                <span className="font-mono text-[#32FF00]" data-testid="extract-progress">
+                  {extract.done} / {extract.total}
+                </span>
+                <button type="button" className="rounded-lg border border-neutral-700 px-3 py-1.5 font-semibold text-neutral-200" onClick={() => (cancelExtractRef.current = true)}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button type="button" data-testid="extract-frames" onClick={() => void extractFrames()} className="inline-flex min-h-[36px] items-center gap-2 rounded-lg border border-neutral-700 px-3.5 py-1.5 font-semibold text-neutral-200 hover:border-neutral-500">
+                {labPro ? <Images className="h-3.5 w-3.5 text-[#32FF00]" /> : <Lock className="h-3.5 w-3.5 text-amber-300" />} Extract frames + labels{labPro ? '' : ' (Pro)'}
+              </button>
+            )}
+            <span className="text-neutral-500">Up to 300 frames, built here and saved only to your downloads.</span>
+          </div>
 
           <div className="flex flex-wrap items-center gap-3 text-xs">
             <button
