@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { ChevronDown, Trash2 } from 'lucide-react';
+import { ChevronDown, Pencil, Trash2 } from 'lucide-react';
 import { DAY_LABEL, SET_TYPE_TAG, Session, Unit, dateLabel, sessionSetCount, sessionVolume } from '../../utils/fitness';
 import { db } from '../../utils/fitnessDb';
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 /** Saved sessions, newest first. Tap one to see its sets; deleting asks for a second tap. */
-export default function HistoryList({ sessions, unit }: { sessions: Session[]; unit: Unit }) {
+export default function HistoryList({ sessions, unit, onEdit }: { sessions: Session[]; unit: Unit; onEdit?: (s: Session) => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const shown = sessions.slice(0, 20);
@@ -32,8 +32,21 @@ export default function HistoryList({ sessions, unit }: { sessions: Session[]; u
                   </span>
                   <ChevronDown className={`h-4 w-4 shrink-0 f-muted transition-transform ${open === s.id ? 'rotate-180' : ''}`} />
                 </button>
+                {onEdit && (
+                  <button
+                    type="button"
+                    aria-label={`Edit ${DAY_LABEL[s.day]} session from ${dateLabel(s.date)}`}
+                    data-testid="history-edit"
+                    onClick={() => onEdit(s)}
+                    className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md"
+                    style={{ color: 'var(--f-muted)' }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 <button
                   type="button"
+                  data-testid="history-delete"
                   aria-label={confirm === s.id ? 'Confirm delete session' : 'Delete session'}
                   onClick={() => {
                     if (confirm === s.id) {
@@ -42,7 +55,7 @@ export default function HistoryList({ sessions, unit }: { sessions: Session[]; u
                     } else setConfirm(s.id);
                   }}
                   onBlur={() => setConfirm((c) => (c === s.id ? null : c))}
-                  className="flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-[11px]"
+                  className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-1 rounded-md px-2 text-[11px]"
                   style={confirm === s.id ? { background: 'var(--f-bad)', color: '#fff', fontWeight: 700 } : { color: 'var(--f-muted)' }}
                 >
                   <Trash2 className="h-3.5 w-3.5" />

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Check, Pin } from 'lucide-react';
-import { DAY_LABEL, DAY_TYPES, DayType, ExerciseLog, Session, SetEntry, SET_TYPES, SET_TYPE_LABEL, SET_TYPE_TAG, Settings, blankSet, cueKey, dateLabel, newExercise, newSession, num, previousSets, sessionSetCount, sessionVolume } from '../../utils/fitness';
+import { DAY_LABEL, DAY_TYPES, DayType, ExerciseLog, Session, SetEntry, SET_TYPES, SET_TYPE_LABEL, SET_TYPE_TAG, Settings, blankSet, cleanWeightInput, cueKey, dateLabel, newExercise, newSession, num, previousSets, sessionSetCount, sessionVolume } from '../../utils/fitness';
 import { estimate1RM } from '../../utils/fitnessMath';
 import { db, getDraft, saveDraft, setCue } from '../../utils/fitnessDb';
 
@@ -13,6 +13,9 @@ interface Props {
   suggested: DayType;
   onSaved: (message: string) => void;
   startRest: (seconds: number) => void;
+  /** A saved session the user asked to edit (from History). Handled once, then cleared. */
+  editRequest?: { session: Session; key: number } | null;
+  onEditHandled?: () => void;
 }
 
 const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
@@ -39,15 +42,32 @@ function useDraft() {
 }
 
 /** Start a Push, Pull or Legs session, then log each set as one row. Sets start prefilled from last time. */
-export default function SessionLogger({ sessions, cues, settings, suggested, onSaved, startRest }: Props) {
+export default function SessionLogger({ sessions, cues, settings, suggested, onSaved, startRest, editRequest, onEditHandled }: Props) {
   const { draft, setDraft, loaded } = useDraft();
   const [newName, setNewName] = useState('');
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [cueEditing, setCueEditing] = useState<string | null>(null);
   const [cueText, setCueText] = useState('');
   const unit = settings.unit;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const sectionRef = useRef<HTMLElement | null>(null);
+
+  // "Edit" in History loads that saved session as the draft. Saving puts it back under the same id,
+  // so it replaces the old copy; discarding leaves the saved one untouched.
+  useEffect(() => {
+    if (!editRequest || !loaded) return;
+    const replace = !draft || window.confirm('Replace the session in progress with the one you are editing? The one in progress will be discarded.');
+    if (replace) {
+      setError('');
+      setDraft({ ...editRequest.session, exercises: editRequest.session.exercises.map((e) => ({ ...e, sets: e.sets.map((x) => ({ ...x })) })) });
+      requestAnimationFrame(() => sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    }
+    onEditHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editRequest, loaded]);
+  const editing = !!draft && sessions.some((s) => s.id === draft.id);
 
   const patch = (fn: (s: Session) => Session) => setDraft((d) => (d ? fn(d) : d));
   const patchExercise = (id: string, fn: (e: ExerciseLog) => ExerciseLog) =>
@@ -70,7 +90,7 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
     patchSet(exId, i, (s) => ({ ...s, type: SET_TYPES[(SET_TYPES.indexOf(s.type) + 1) % SET_TYPES.length] }));
 
   const save = async () => {
-    if (!draft) return;
+    if (!draft || saving) return;
     if (sessionSetCount(draft) === 0) {
       setError('Tick at least one working set as done (with reps) before saving. Warm-ups do not count.');
       return;
@@ -80,9 +100,18 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
       .map((e) => ({ ...e, sets: e.sets.filter((s) => s.done && num(s.reps) > 0) }))
       .filter((e) => e.sets.length > 0);
     const saved: Session = { ...draft, exercises, savedAt: Date.now() };
-    await db.sessions.put(saved);
+    setSaving(true);
+    try {
+      await db.sessions.put(saved);
+    } catch {
+      // The draft is kept, so nothing is lost and the user can try again.
+      setError('Could not save to this browser (storage may be full or blocked). Your session is still here; try again.');
+      setSaving(false);
+      return;
+    }
+    setSaving(false);
     setDraft(null);
-    onSaved(`${DAY_LABEL[saved.day]} session saved: ${sessionSetCount(saved)} working sets, ${fmt(sessionVolume(saved))} ${unit} volume.`);
+    onSaved(`${DAY_LABEL[saved.day]} session ${editing ? 'updated' : 'saved'}: ${sessionSetCount(saved)} working sets, ${fmt(sessionVolume(saved))} ${unit} volume.`);
   };
 
   if (!loaded) return <section className="f-card f-small">Loading…</section>;
@@ -105,11 +134,11 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
   }
 
   return (
-    <section className="f-card f-card-accent space-y-4" data-testid="session-draft">
+    <section ref={sectionRef} className="f-card f-card-accent scroll-mt-20 space-y-4" data-testid="session-draft">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="f-h">
-            {DAY_LABEL[draft.day]} session <span className="f-small">· {dateLabel(draft.date)}</span>
+            {editing ? 'Editing ' : ''}{DAY_LABEL[draft.day]} session <span className="f-small">· {dateLabel(draft.date)}</span>
           </h2>
           <p className="f-small" data-testid="draft-summary">
             {sessionSetCount(draft)} sets done · {fmt(sessionVolume(draft))} {unit} volume
@@ -120,13 +149,13 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
             type="button"
             className="f-btn"
             onClick={() => {
-              if (window.confirm('Discard this session without saving?')) setDraft(null);
+              if (window.confirm(editing ? 'Discard your changes? The saved session stays as it was.' : 'Discard this session without saving?')) setDraft(null);
             }}
           >
-            Discard
+            {editing ? 'Discard changes' : 'Discard'}
           </button>
-          <button type="button" data-testid="save-session" className="f-btn-primary" onClick={() => void save()}>
-            <Check className="h-4 w-4" /> Finish &amp; save
+          <button type="button" data-testid="save-session" className="f-btn-primary" disabled={saving} onClick={() => void save()}>
+            <Check className="h-4 w-4" /> {editing ? 'Save changes' : 'Finish & save'}
           </button>
         </div>
       </div>
@@ -164,7 +193,7 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
               </div>
               <button
                 type="button"
-                className={cues[cueKey(ex.name)] ? 'f-accent' : 'f-muted hover:text-white'}
+                className={`flex h-10 w-10 shrink-0 items-center justify-center ${cues[cueKey(ex.name)] ? 'f-accent' : 'f-muted hover:text-white'}`}
                 aria-label={cues[cueKey(ex.name)] ? `Edit pinned cue for ${ex.name}` : `Pin a cue to ${ex.name}`}
                 data-testid="pin-cue"
                 onClick={() => {
@@ -174,7 +203,16 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
               >
                 <Pin className="h-4 w-4" />
               </button>
-              <button type="button" aria-label={`Remove ${ex.name}`} className="f-muted hover:text-white" onClick={() => patch((s) => ({ ...s, exercises: s.exercises.filter((e) => e.id !== ex.id) }))}>
+              <button
+                type="button"
+                aria-label={`Remove ${ex.name}`}
+                className="flex h-10 w-10 shrink-0 items-center justify-center f-muted hover:text-white"
+                onClick={() => {
+                  // Removing an exercise throws away its ticked sets, so ask first when there are any.
+                  if (ex.sets.some((x) => x.done) && !window.confirm(`Remove ${ex.name} and its ticked sets?`)) return;
+                  patch((s) => ({ ...s, exercises: s.exercises.filter((e) => e.id !== ex.id) }));
+                }}
+              >
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -224,6 +262,7 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
                       <button
                         type="button"
                         className="f-tag"
+                        style={{ minHeight: 36 }}
                         data-type={set.type}
                         data-testid="set-type"
                         aria-label={`Set ${i + 1}: ${SET_TYPE_LABEL[set.type]}. Tap to change the set type.`}
@@ -240,7 +279,7 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
                         aria-label={`${ex.name} set ${i + 1} weight`}
                         placeholder="0"
                         value={set.weight}
-                        onChange={(e) => patchSet(ex.id, i, (s) => ({ ...s, weight: e.target.value.slice(0, 8) }))}
+                        onChange={(e) => patchSet(ex.id, i, (s) => ({ ...s, weight: cleanWeightInput(e.target.value) }))}
                       />
                       <input
                         className="f-input f-center"
@@ -262,7 +301,7 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
                         checked={set.done}
                         onChange={(e) => toggleDone(ex.id, i, set, e.target.checked)}
                       />
-                      <button type="button" aria-label={`Remove set ${i + 1}`} className="f-muted hover:text-white" onClick={() => patchExercise(ex.id, (x) => ({ ...x, sets: x.sets.filter((_, j) => j !== i) }))}>
+                      <button type="button" aria-label={`Remove set ${i + 1}`} className="flex h-8 w-7 items-center justify-center text-base f-muted hover:text-white" onClick={() => patchExercise(ex.id, (x) => ({ ...x, sets: x.sets.filter((_, j) => j !== i) }))}>
                         ×
                       </button>
                     </div>
@@ -273,7 +312,7 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
 
             <button
               type="button"
-              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold f-accent hover:underline"
+              className="mt-1 inline-flex min-h-[40px] items-center gap-1 px-1 text-xs font-semibold f-accent hover:underline"
               onClick={() =>
                 patchExercise(ex.id, (x) => {
                   // A new set starts from the last working set, which is how most people train.

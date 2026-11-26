@@ -387,11 +387,11 @@ body {
   display: grid;
   align-items: center;
   gap: 6px;
-  grid-template-columns: 2.4rem 3.5rem minmax(0, 1fr) minmax(0, 1fr) 2.1rem 1rem;
+  grid-template-columns: 2.2rem 3.1rem minmax(0, 1fr) minmax(0, 1fr) 1.9rem 1.5rem;
 }
 [data-theme="fitness"] .f-setgrid .f-e1 { display: none; }
 @media (min-width: 480px) {
-  [data-theme="fitness"] .f-setgrid { grid-template-columns: 2.75rem 4.4rem minmax(0, 1fr) minmax(0, 1fr) 3.2rem 2.4rem 1.4rem; }
+  [data-theme="fitness"] .f-setgrid { grid-template-columns: 2.75rem 4.4rem minmax(0, 1fr) minmax(0, 1fr) 3.2rem 2.4rem 1.75rem; }
   [data-theme="fitness"] .f-setgrid .f-e1 { display: block; }
 }
 

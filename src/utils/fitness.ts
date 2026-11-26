@@ -233,6 +233,14 @@ export function num(text: string | number): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+/** What a weight field may hold: digits and at most one "." or "," (so "80abc" or "1.2.3" cannot be typed). */
+export function cleanWeightInput(text: string): string {
+  const kept = text.replace(/[^\d.,]/g, '');
+  const i = kept.search(/[.,]/);
+  const out = i < 0 ? kept : kept.slice(0, i + 1) + kept.slice(i + 1).replace(/[.,]/g, '');
+  return out.slice(0, 8);
+}
+
 export function blankSet(type: SetType = 'normal'): SetEntry {
   return { weight: '', reps: '', done: false, type };
 }
@@ -356,7 +364,7 @@ export function cleanSession(v: unknown): Session | null {
         .filter(isObj)
         .slice(0, 30)
         .map((s) => ({
-          weight: str(s.weight, '', 8),
+          weight: cleanWeightInput(str(s.weight, '', 8)),
           reps: str(s.reps, '', 5),
           done: s.done === true,
           type: SET_TYPES.includes(s.type) ? (s.type as SetType) : ('normal' as SetType),
