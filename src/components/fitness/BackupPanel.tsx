@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Download, Upload } from 'lucide-react';
 import { MAX_BACKUP_BYTES, MAX_CSV_BYTES, db, exportBackup, importBackup, importCsv, nutritionCsv, weightsCsv, workoutsCsv } from '../../utils/fitnessDb';
 import { downloadTextFile } from '../../utils/yoloLabels';
 import { Unit, toISODate } from '../../utils/fitness';
+import { markBackup, protectStorage, storageStatus } from '../../utils/offline';
 
 type Notify = (type: 'success' | 'error' | 'info', message: string) => void;
 
@@ -12,10 +13,15 @@ export default function BackupPanel({ unit, notify }: { unit: Unit; notify: Noti
   const csvRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const stamp = toISODate();
+  const [store, setStore] = useState<{ persisted: boolean | null; usedMB: number | null } | null>(null);
+  useEffect(() => {
+    void storageStatus().then(setStore);
+  }, []);
 
   const exportJson = async () => {
     const backup = await exportBackup();
     downloadTextFile(`farai-fitness-backup-${stamp}.json`, JSON.stringify(backup, null, 2), 'application/json');
+    markBackup();
     notify('success', `Backup saved: ${backup.sessions.length} sessions, ${backup.meals.length} meals, ${backup.weights.length} weigh-ins.`);
   };
 
@@ -75,6 +81,27 @@ export default function BackupPanel({ unit, notify }: { unit: Unit; notify: Noti
         Your data lives only in this browser. Download a backup now and then, and use it to move to another device. Restoring a JSON backup
         replaces everything; importing a CSV adds to what you have.
       </p>
+      {store && (
+        <p className="f-small" data-testid="storage-status" data-persisted={String(store.persisted)}>
+          Browser storage protection:{' '}
+          <strong style={{ color: 'var(--f-text)' }}>{store.persisted === true ? 'on' : store.persisted === false ? 'off' : 'not reported by this browser'}</strong>
+          {store.usedMB !== null ? ` · ${store.usedMB} MB used` : ''}.
+          {store.persisted === false && (
+            <>
+              {' '}
+              <button
+                type="button"
+                className="underline"
+                style={{ minHeight: 32 }}
+                data-testid="protect-storage"
+                onClick={() => void protectStorage().then(() => storageStatus().then(setStore))}
+              >
+                Ask the browser to protect it
+              </button>
+            </>
+          )}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         <button type="button" className="f-btn-primary" data-testid="export-json" onClick={() => void exportJson()}>
           <Download className="h-4 w-4" /> Backup (JSON)

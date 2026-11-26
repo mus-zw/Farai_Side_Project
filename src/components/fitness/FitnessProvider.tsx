@@ -40,13 +40,37 @@ export interface UndoState {
 
 const UNDO_MS = 8000;
 
+// The rest timer runs on performance.now(), which restarts with the page, so its deadline is also kept as
+// a wall-clock time and restored if it is still in the future after a reload.
+const REST_KEY = 'farai_fitness_rest_v1';
+function readRest(): RestState {
+  try {
+    const v = JSON.parse(localStorage.getItem(REST_KEY) || 'null');
+    if (v && typeof v.endsAtWall === 'number' && typeof v.total === 'number' && v.endsAtWall > Date.now()) {
+      return { endsAt: performance.now() + (v.endsAtWall - Date.now()), total: v.total };
+    }
+  } catch {
+    // Unreadable: no timer.
+  }
+  return { endsAt: null, total: 0 };
+}
+function saveRest(r: RestState) {
+  try {
+    if (r.endsAt === null) localStorage.removeItem(REST_KEY);
+    else localStorage.setItem(REST_KEY, JSON.stringify({ endsAtWall: Date.now() + (r.endsAt - performance.now()), total: r.total }));
+  } catch {
+    // Storage blocked: the timer just will not survive a reload.
+  }
+}
+
 const FitnessContext = createContext<FitnessContextValue | null>(null);
 
 /** Opens the database, exposes settings, and owns the rest timer shared by the logger and the nav. */
 export function FitnessProvider({ children, notify }: { children: ReactNode; notify: Notify }) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
-  const [rest, setRest] = useState<RestState>({ endsAt: null, total: 0 });
+  const [rest, setRest] = useState<RestState>(readRest);
+  useEffect(() => saveRest(rest), [rest]);
 
   useEffect(() => {
     let alive = true;

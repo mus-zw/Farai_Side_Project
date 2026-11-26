@@ -1,10 +1,11 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
 import { Home, CalendarCheck, Dumbbell, LineChart, UserRound } from 'lucide-react';
 import { FitnessProvider, useFitness } from './FitnessProvider';
 import { FitnessAuthProvider, useFitnessAuth } from './FitnessAuthProvider';
 import RestTimerBar from './RestTimerBar';
 import UndoBar from './UndoBar';
+import { registerFitnessOffline } from '../../utils/offline';
 import Onboarding from './Onboarding';
 import SiteLink from '../SiteLink';
 import { isStandalone, linkTo } from '../../utils/site';
@@ -72,9 +73,29 @@ function AppBar() {
   );
 }
 
+/** Make the app installable and usable offline, and fetch the other screens' code while there is a connection. */
+function useOfflineReady(ready: boolean) {
+  useEffect(() => registerFitnessOffline(), []);
+  useEffect(() => {
+    if (!ready || !navigator.onLine) return;
+    const warm = () => {
+      // Opening these once lets the offline shell keep their code, so every tab works without a connection.
+      void import('../../pages/fitness/ProgressPage');
+      void import('../../pages/fitness/ProfilePage');
+      void import('./FormCoach');
+    };
+    const id = 'requestIdleCallback' in window ? window.requestIdleCallback(warm, { timeout: 8000 }) : setTimeout(warm, 3000);
+    return () => {
+      if ('cancelIdleCallback' in window) window.cancelIdleCallback(id as number);
+      else clearTimeout(id as unknown as ReturnType<typeof setTimeout>);
+    };
+  }, [ready]);
+}
+
 function Shell() {
   const { status, error, seeded, athlete } = useFitness();
   const ready = status === 'ready' && athlete !== undefined;
+  useOfflineReady(ready);
   const onboarding = status === 'ready' && athlete === null;
 
   return (

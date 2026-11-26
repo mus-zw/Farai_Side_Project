@@ -5,6 +5,7 @@ import { estimate1RM } from '../../utils/fitnessMath';
 import { db, getDraft, saveDraft, setCue } from '../../utils/fitnessDb';
 import { mergeExercises } from '../../utils/quickLog';
 import { alternativesFor } from '../../utils/swaps';
+import { protectStorage } from '../../utils/offline';
 
 interface Props {
   /** Saved sessions, newest first. */
@@ -36,26 +37,34 @@ const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 function useDraft() {
   const [draft, setDraft] = useState<Session | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   useEffect(() => {
     let alive = true;
-    getDraft().then((d) => {
-      if (!alive) return;
-      setDraft(d);
-      setLoaded(true);
-    });
+    getDraft()
+      .then((d) => {
+        if (!alive) return;
+        setDraft(d);
+        setLoaded(true);
+      })
+      .catch(() => alive && setLoaded(true)); // unreadable storage: start empty rather than hang on "Loading"
     return () => {
       alive = false;
     };
   }, []);
   useEffect(() => {
-    if (loaded) void saveDraft(draft);
+    if (!loaded) return;
+    // A failed save used to vanish silently; now the person is told their session is not being kept.
+    saveDraft(draft).then(
+      () => setSaveFailed(false),
+      () => setSaveFailed(true)
+    );
   }, [draft, loaded]);
-  return { draft, setDraft, loaded };
+  return { draft, setDraft, loaded, saveFailed };
 }
 
 /** Start a Push, Pull or Legs session, then log each set as one row. Sets start prefilled from last time. */
 export default function SessionLogger({ sessions, cues, settings, activeDay, activeLabel, openCount, onDayChosen, onSaved, startRest, editRequest, onEditHandled, appendRequest, onAppendHandled }: Props) {
-  const { draft, setDraft, loaded } = useDraft();
+  const { draft, setDraft, loaded, saveFailed } = useDraft();
   const [newName, setNewName] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -173,6 +182,7 @@ export default function SessionLogger({ sessions, cues, settings, activeDay, act
       return;
     }
     setSaving(false);
+    void protectStorage(); // a first saved session is the moment to ask the browser to keep the data
     setDraft(null);
     onSaved(`${DAY_LABEL[saved.day]} session ${editing ? 'updated' : 'saved'}: ${sessionSetCount(saved)} working sets, ${fmt(sessionVolume(saved))} ${unit} volume.`);
   };
@@ -251,6 +261,11 @@ export default function SessionLogger({ sessions, cues, settings, activeDay, act
               </span>
             ))}
         </div>
+      )}
+      {saveFailed && (
+        <p role="alert" className="text-xs" style={{ color: 'var(--f-bad)' }} data-testid="draft-save-failed">
+          This session is not being kept: your browser could not save it (storage may be full or blocked). Keep this tab open and use Finish &amp; save soon.
+        </p>
       )}
       {error && (
         <p role="alert" className="text-xs" style={{ color: 'var(--f-bad)' }} data-testid="session-error">

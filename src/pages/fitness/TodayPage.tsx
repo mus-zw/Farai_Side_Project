@@ -3,6 +3,7 @@ import type { DayType, ExerciseLog } from '../../utils/fitness';
 import { useFitness } from '../../components/fitness/FitnessProvider';
 import QuickLog from '../../components/fitness/QuickLog';
 import TodayHero from '../../components/fitness/TodayHero';
+import BackupNudge from '../../components/fitness/BackupNudge';
 import TrainPage from './TrainPage';
 import NutritionPage from './NutritionPage';
 
@@ -14,6 +15,7 @@ export default function TodayPage() {
   return (
     <div className="space-y-4">
       <TodayHero onStart={(day) => setStart({ day, key: Date.now() })} />
+      <BackupNudge />
       <QuickLog notify={notify} onExercises={(exercises) => setAppend({ exercises, key: Date.now() })} />
       <TrainPage appendRequest={append} onAppendHandled={() => setAppend(null)} startRequest={start} />
       <NutritionPage />

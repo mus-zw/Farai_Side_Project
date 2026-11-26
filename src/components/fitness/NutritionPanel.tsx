@@ -6,6 +6,7 @@ import { db } from '../../utils/fitnessDb';
 import type { MealDraft } from '../../utils/mealScan';
 import MealScan from './MealScan';
 import { useFitness } from './FitnessProvider';
+import { protectStorage } from '../../utils/offline';
 
 interface Props {
   date: string;
@@ -124,6 +125,7 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
     }
     busy.current = false;
     setSaving(false);
+    void protectStorage();
     setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
     setKcalAuto(true);
     setEditingMeal(null);

@@ -35,7 +35,12 @@ async function urlExists(url: string): Promise<boolean> {
     // A static host that rewrites unknown paths to index.html answers 200 with HTML.
     return res.ok && !(res.headers.get('content-type') || '').includes('text/html');
   } catch {
-    return false;
+    // No connection: the offline shell may still hold the file from an earlier visit (it only handles GET).
+    try {
+      return Boolean(await caches.match(url));
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -213,7 +218,7 @@ export default function FormCoach() {
     connectionsRef.current = vision.PoseLandmarker.POSE_CONNECTIONS.map((c) => ({ start: c.start, end: c.end }));
 
     if (!(await urlExists(`${WASM_BASE}/vision_wasm_internal.wasm`))) {
-      throw new Error('The MediaPipe runtime files are missing from this build (expected under /mediapipe/wasm/).');
+      throw new Error(navigator.onLine === false ? 'You are offline, and the coach has not been downloaded on this device yet. Connect once to download it, and it will work offline after that.' : 'The MediaPipe runtime files are missing from this build (expected under /mediapipe/wasm/).');
     }
     const fileset = await vision.FilesetResolver.forVisionTasks(WASM_BASE);
 

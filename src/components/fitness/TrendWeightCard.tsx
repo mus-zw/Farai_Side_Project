@@ -4,6 +4,7 @@ import { GOAL_LABEL, Goal, Meal, Settings, WeightEntry, dateLabel, num, toISODat
 import { adaptiveTarget, linePath, trendSeries, weeklyRate } from '../../utils/fitnessMath';
 import { db, type SettingsPatch } from '../../utils/fitnessDb';
 import { useFitness } from './FitnessProvider';
+import { protectStorage } from '../../utils/offline';
 
 interface Props {
   weights: WeightEntry[];
@@ -50,6 +51,7 @@ export default function TrendWeightCard({ weights, byDate, settings, onSettings 
       setError('Could not save to this browser (storage may be full or blocked). Try again.');
       return;
     }
+    void protectStorage();
     setValue('');
   };
 

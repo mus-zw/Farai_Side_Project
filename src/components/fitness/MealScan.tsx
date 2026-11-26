@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Camera, ImagePlus, ScanLine, ShieldCheck, X } from 'lucide-react';
 import { useConsent } from '../ConsentProvider';
 import { DEFAULT_MODEL_CONFIG } from '../../utils/browserModels';
+import { looksOffline } from '../../utils/offline';
 import { MealDraft, SCAN_CONFIDENCE, describeItems, draftFromDetections } from '../../utils/mealScan';
 
 /** A photo larger than this is refused before it is decoded. */
@@ -31,6 +32,7 @@ function cameraErrorMessage(err: unknown): string {
 
 function scanErrorMessage(err: unknown): string {
   const msg = (err as { message?: string })?.message || String(err);
+  if (looksOffline(err)) return 'You are offline, and the on-device detector has not been downloaded on this device yet. Connect once to download it (about 40 MB); after that photo scanning works offline. Or add the meal by hand.';
   if (/missing on this host|returned a web page/i.test(msg)) {
     return 'Photo scanning needs the on-device detector, which is not available on this site. Add the meal by hand.';
   }

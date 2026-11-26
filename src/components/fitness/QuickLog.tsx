@@ -3,6 +3,7 @@ import { X, Zap } from 'lucide-react';
 import { ExerciseLog, newId, toISODate } from '../../utils/fitness';
 import { QuickLogResult, parseQuickLog } from '../../utils/quickLog';
 import { db } from '../../utils/fitnessDb';
+import { protectStorage } from '../../utils/offline';
 
 interface Props {
   /** Exercises read from the note; the session logger adds them to the open session. */
@@ -41,6 +42,7 @@ export default function QuickLog({ onExercises, notify }: Props) {
     try {
       const date = toISODate();
       for (const m of result.meals) await db.meals.put({ id: newId(), date, name: m.name, kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat });
+      void protectStorage();
       if (result.exercises.length) onExercises(result.exercises);
       const parts = [result.meals.length ? `${result.meals.length} meal${result.meals.length > 1 ? 's' : ''}` : '', result.exercises.length ? `${result.exercises.length} exercise${result.exercises.length > 1 ? 's' : ''}` : ''].filter(Boolean);
       notify('success', `Added ${parts.join(' and ')}. Exercises sit in your open session until you finish and save it.`);
