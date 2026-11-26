@@ -86,7 +86,7 @@ function Shell() {
       {seeded && !onboarding && (
         <div className="mx-auto flex max-w-[880px] items-center justify-between gap-3 px-4 pt-3 text-[11px]" data-testid="sample-banner">
           <span className="f-muted">Showing sample data.</span>
-          <Link to="/fitness/profile" className="font-bold f-accent hover:underline" data-testid="sample-pill">
+          <Link to="/fitness/profile" className="inline-flex min-h-[32px] items-center font-bold f-accent hover:underline" data-testid="sample-pill">
             Start fresh or reset
           </Link>
         </div>

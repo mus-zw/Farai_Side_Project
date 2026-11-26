@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { Meal, Targets, dateLabel, kcalFromMacros, mealTotals, newId, num, progress, shiftDate, toISODate } from '../../utils/fitness';
 import { db } from '../../utils/fitnessDb';
 
@@ -39,6 +39,9 @@ function Bar({ label, value, target, unit, testId }: { label: string; value: num
 export default function NutritionPanel({ date, onDate, meals, targets, onTargets }: Props) {
   const [f, setF] = useState({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
   const [editing, setEditing] = useState(false);
+  /** The meal being edited (its id), or null when adding a new one. */
+  const [editId, setEditId] = useState<string | null>(null);
+  const [error, setError] = useState('');
   const totals = mealTotals(meals);
   const today = toISODate();
   const set = (k: keyof typeof f, v: string, max = 5) => setF((x) => ({ ...x, [k]: k === 'name' ? v.slice(0, 60) : v.replace(/\D/g, '').slice(0, max) }));
@@ -50,8 +53,30 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
     const fat = num(f.fat);
     // Calories can be typed, or worked out from the macros (4/4/9).
     const kcal = Math.round(num(f.kcal)) || kcalFromMacros(protein, carbs, fat);
-    if (!kcal && !protein) return;
-    await db.meals.put({ id: newId(), date, name: f.name.trim() || `Meal ${meals.length + 1}`, kcal, protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat) });
+    if (!kcal && !protein) {
+      setError('Enter calories or at least some protein for the meal.');
+      return;
+    }
+    setError('');
+    const existing = editId ? meals.find((m) => m.id === editId) : undefined;
+    try {
+      await db.meals.put({ id: existing?.id ?? newId(), date: existing?.date ?? date, name: f.name.trim() || existing?.name || `Meal ${meals.length + 1}`, kcal, protein: Math.round(protein), carbs: Math.round(carbs), fat: Math.round(fat) });
+    } catch {
+      setError('Could not save to this browser (storage may be full or blocked). Try again.');
+      return;
+    }
+    setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
+    setEditId(null);
+  };
+
+  const startEdit = (m: Meal) => {
+    setEditId(m.id);
+    setError('');
+    setF({ name: m.name, kcal: String(m.kcal), protein: String(m.protein), carbs: String(m.carbs), fat: String(m.fat) });
+  };
+  const cancelEdit = () => {
+    setEditId(null);
+    setError('');
     setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
   };
 
@@ -86,7 +111,7 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
       </div>
 
       <div>
-        <button type="button" className="text-[11px] font-semibold f-accent hover:underline" onClick={() => setEditing((v) => !v)}>
+        <button type="button" className="inline-flex min-h-[32px] items-center text-[11px] font-semibold f-accent hover:underline" onClick={() => setEditing((v) => !v)}>
           {editing ? 'Hide targets' : 'Edit daily targets'}
         </button>
         {editing && (
@@ -119,7 +144,19 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
             <span className="min-w-0 truncate">{m.name}</span>
             <span className="flex shrink-0 items-center gap-3 f-muted">
               {m.kcal} kcal · P{m.protein} C{m.carbs} F{m.fat}
-              <button type="button" aria-label={`Remove ${m.name}`} className="hover:text-white" onClick={() => void db.meals.delete(m.id)}>
+              <button type="button" aria-label={`Edit ${m.name}`} data-testid="meal-edit" className="flex h-9 w-9 items-center justify-center hover:text-white" onClick={() => startEdit(m)}>
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label={`Remove ${m.name}`}
+                data-testid="meal-delete"
+                className="flex h-9 w-9 items-center justify-center hover:text-white"
+                onClick={() => {
+                  if (editId === m.id) cancelEdit();
+                  void db.meals.delete(m.id);
+                }}
+              >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </span>
@@ -135,9 +172,19 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
           <input className="f-input f-center" inputMode="numeric" value={f.carbs} onChange={(e) => set('carbs', e.target.value, 4)} placeholder="C g" aria-label="Carbs in grams" data-testid="meal-carbs" />
           <input className="f-input f-center" inputMode="numeric" value={f.fat} onChange={(e) => set('fat', e.target.value, 4)} placeholder="F g" aria-label="Fat in grams" data-testid="meal-fat" />
           <button type="submit" data-testid="add-meal" className="f-btn-primary">
-            Add
+            {editId ? 'Save' : 'Add'}
           </button>
         </div>
+        {editId && (
+          <button type="button" className="f-btn" data-testid="meal-cancel-edit" onClick={cancelEdit}>
+            Cancel editing
+          </button>
+        )}
+        {error && (
+          <p role="alert" className="text-xs" style={{ color: 'var(--f-bad)' }} data-testid="meal-error">
+            {error}
+          </p>
+        )}
         <p className="f-small">Leave kcal empty to work it out from the macros (4 / 4 / 9 per gram).</p>
       </form>
     </section>

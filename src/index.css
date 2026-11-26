@@ -334,7 +334,7 @@ body {
   background: transparent;
   cursor: pointer;
 }
-[data-theme="fitness"] .f-chip[aria-pressed="true"] { color: var(--f-accent); border-color: var(--f-accent); background: var(--f-accent-soft); }
+[data-theme="fitness"] .f-chip[aria-pressed="true"] { color: var(--f-text); font-weight: 700; border-color: var(--f-accent); background: var(--f-accent-soft); }
 
 [data-theme="fitness"] .f-track { height: 8px; border-radius: 999px; background: var(--f-surface-2); overflow: hidden; }
 [data-theme="fitness"] .f-fill { height: 100%; border-radius: 999px; background: var(--f-accent); transition: width 0.25s; }

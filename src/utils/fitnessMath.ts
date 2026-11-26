@@ -4,7 +4,7 @@
  * with an adaptive calorie estimate, CSV building and chart paths.
  * Pure functions: no DOM, no React, no IndexedDB.
  */
-import { DayType, Meal, Session, SetEntry, Unit, WeightEntry, Goal, mealTotals, num, workingSets, shiftDate } from './fitness';
+import { DayType, Meal, Session, SetEntry, Unit, WeightEntry, Goal, mealTotals, num, workingSets, shiftDate, sessionVolume, sessionSetCount } from './fitness';
 
 // --- 1RM and working weights ----------------------------------------------------------
 
@@ -376,4 +376,38 @@ export function linePath(values: readonly number[], width: number, height: numbe
   const x = (i: number) => pad + (values.length === 1 ? (width - 2 * pad) / 2 : (i * (width - 2 * pad)) / (values.length - 1));
   const y = (v: number) => height - pad - ((v - lo) / span) * (height - 2 * pad);
   return values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+}
+
+// --- Weekly training volume ---------------------------------------------------------------------
+
+export interface WeekVolume {
+  /** Monday of the week, YYYY-MM-DD. */
+  weekStart: string;
+  /** Working-set volume (weight x reps), warm-ups excluded. */
+  volume: number;
+  sessions: number;
+  sets: number;
+}
+
+/** The Monday on or before a date. */
+export function weekStartOf(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dow = (new Date(y, m - 1, d).getDay() + 6) % 7; // Monday = 0
+  return shiftDate(iso, -dow);
+}
+
+/** Volume per calendar week for the last `weeks` weeks ending with the week of `today`, oldest first. */
+export function weeklyVolume(sessions: readonly Session[], weeks: number, today: string): WeekVolume[] {
+  const thisWeek = weekStartOf(today);
+  const out: WeekVolume[] = [];
+  for (let i = weeks - 1; i >= 0; i--) out.push({ weekStart: shiftDate(thisWeek, -7 * i), volume: 0, sessions: 0, sets: 0 });
+  const byStart = new Map(out.map((w) => [w.weekStart, w]));
+  for (const s of sessions) {
+    const w = byStart.get(weekStartOf(s.date));
+    if (!w) continue;
+    w.sessions += 1;
+    w.volume += sessionVolume(s);
+    w.sets += sessionSetCount(s);
+  }
+  return out;
 }

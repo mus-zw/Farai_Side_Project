@@ -9,7 +9,7 @@ import { hasConsent } from '../../utils/consent';
 import EngineeredBy from '../../components/EngineeredBy';
 import { isStandalone, linkTo } from '../../utils/site';
 import { ArrowLeft, ScanSearch, UserCircle2 } from 'lucide-react';
-import { SCHEDULE_LABEL, Schedule, Unit, MAX_ATHLETE_NAME, cleanAthleteName, num } from '../../utils/fitness';
+import { GOAL_LABEL, Goal, SCHEDULE_LABEL, Schedule, Unit, MAX_ATHLETE_NAME, cleanAthleteName, cleanWeightInput, num } from '../../utils/fitness';
 import { renameAthlete, resetEverything, seedSampleData, startFresh } from '../../utils/fitnessDb';
 import { useFitness } from '../../components/fitness/FitnessProvider';
 import { useProfile } from '../../components/ProfileProvider';
@@ -29,12 +29,16 @@ export default function ProfilePage() {
   const plan = fitnessStatus(useEntitlements());
   const [name, setName] = useState(athlete?.name ?? '');
   useEffect(() => setName(athlete?.name ?? ''), [athlete?.name]);
+  // Typed as text so "75." survives while typing; saved as a number.
+  const [goalText, setGoalText] = useState(settings.goalWeight ? String(settings.goalWeight) : '');
+  // Follow the saved value only when it really differs, so typing "75." is not rewritten to "75".
+  useEffect(() => setGoalText((t) => (num(t) === settings.goalWeight ? t : settings.goalWeight ? String(settings.goalWeight) : '')), [settings.goalWeight]);
   if (!athlete) return null;
 
   const guest = athlete.mode === 'guest';
   const nameChanged = cleanAthleteName(name) !== null && cleanAthleteName(name) !== athlete.name;
 
-  const setTarget = (key: 'kcal' | 'protein' | 'meals', raw: string) => {
+  const setTarget = (key: 'kcal' | 'protein' | 'carbs' | 'fat' | 'meals', raw: string) => {
     const v = Math.round(num(raw));
     updateSettings({ targets: { [key]: key === 'meals' ? Math.min(12, v) : v } });
   };
@@ -198,7 +202,34 @@ export default function ProfilePage() {
           </div>
           <p className="f-small">Changing the unit relabels your numbers; it does not convert values you already logged.</p>
         </div>
-        <div className="grid grid-cols-3 gap-2 f-small">
+        <div className="space-y-1.5">
+          <div className="text-sm">Goal</div>
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Goal">
+            {(Object.keys(GOAL_LABEL) as Goal[]).map((g) => (
+              <button key={g} type="button" className="f-chip" aria-pressed={settings.goal === g} data-testid={`profile-goal-${g}`} onClick={() => updateSettings({ goal: g })}>
+                {GOAL_LABEL[g]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <label className="block space-y-1 f-small">
+          Goal body weight ({settings.unit}, optional)
+          <input
+            className="f-input f-center"
+            style={{ maxWidth: 140 }}
+            inputMode="decimal"
+            data-testid="profile-goal-weight"
+            placeholder="none"
+            value={goalText}
+            onChange={(e) => {
+              const t = cleanWeightInput(e.target.value).replace(/([.,]\d)\d+/, '$1'); // one decimal place
+              setGoalText(t);
+              const v = num(t);
+              if (v <= 700 && (v > 0 || t === '')) updateSettings({ goalWeight: Math.round(v * 10) / 10 });
+            }}
+          />
+        </label>
+        <div className="grid grid-cols-3 gap-2 f-small sm:grid-cols-5">
           <label className="space-y-1">
             Calories
             <input className="f-input f-center" inputMode="numeric" data-testid="profile-kcal" value={settings.targets.kcal} onChange={(e) => setTarget('kcal', e.target.value)} />
@@ -206,6 +237,14 @@ export default function ProfilePage() {
           <label className="space-y-1">
             Protein (g)
             <input className="f-input f-center" inputMode="numeric" data-testid="profile-protein" value={settings.targets.protein} onChange={(e) => setTarget('protein', e.target.value)} />
+          </label>
+          <label className="space-y-1">
+            Carbs (g)
+            <input className="f-input f-center" inputMode="numeric" data-testid="profile-carbs" value={settings.targets.carbs} onChange={(e) => setTarget('carbs', e.target.value)} />
+          </label>
+          <label className="space-y-1">
+            Fat (g)
+            <input className="f-input f-center" inputMode="numeric" data-testid="profile-fat" value={settings.targets.fat} onChange={(e) => setTarget('fat', e.target.value)} />
           </label>
           <label className="space-y-1">
             Meals / day

@@ -18,6 +18,7 @@ const H = 120;
 export default function TrendWeightCard({ weights, byDate, settings, onSettings }: Props) {
   const [value, setValue] = useState('');
   const [date, setDate] = useState(toISODate());
+  const [error, setError] = useState('');
   const unit = settings.unit;
   const today = toISODate();
 
@@ -36,8 +37,17 @@ export default function TrendWeightCard({ weights, byDate, settings, onSettings 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     const v = num(value);
-    if (!v || v > 700) return;
-    await db.weights.put({ date, value: Math.round(v * 10) / 10 }); // one weigh-in per day: the same date replaces it
+    if (!v || v > 700) {
+      setError(`Enter a weight between 1 and 700 ${unit}.`);
+      return;
+    }
+    setError('');
+    try {
+      await db.weights.put({ date, value: Math.round(v * 10) / 10 }); // one weigh-in per day: the same date replaces it
+    } catch {
+      setError('Could not save to this browser (storage may be full or blocked). Try again.');
+      return;
+    }
     setValue('');
   };
 
@@ -54,6 +64,13 @@ export default function TrendWeightCard({ weights, byDate, settings, onSettings 
           </span>
         )}
       </div>
+
+      {settings.goalWeight > 0 && latest && (
+        <p className="f-small" data-testid="goal-weight-line">
+          Goal {settings.goalWeight} {unit} ·{' '}
+          {Math.abs(latest.trend - settings.goalWeight) < 0.3 ? 'you are there' : `${Math.abs(latest.trend - settings.goalWeight).toFixed(1)} ${unit} ${latest.trend > settings.goalWeight ? 'to lose' : 'to gain'}`}
+        </p>
+      )}
 
       {n === 0 ? (
         <p className="f-small">Log your weight a few times a week. The trend line filters out water and food noise so you can see the real direction.</p>
@@ -74,12 +91,18 @@ export default function TrendWeightCard({ weights, byDate, settings, onSettings 
         </button>
       </form>
 
+      {error && (
+        <p role="alert" className="text-xs" style={{ color: 'var(--f-bad)' }} data-testid="weight-error">
+          {error}
+        </p>
+      )}
+
       {weights.length > 0 && (
         <ul className="flex flex-wrap gap-1.5">
           {[...weights].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map((w) => (
             <li key={w.date} className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]" style={{ borderColor: 'var(--f-border)' }}>
               {dateLabel(w.date)} · {w.value} {unit}
-              <button type="button" aria-label={`Delete weigh-in ${w.date}`} className="f-muted hover:text-white" onClick={() => void db.weights.delete(w.date)}>
+              <button type="button" aria-label={`Delete weigh-in ${w.date}`} className="flex h-8 w-8 items-center justify-center f-muted hover:text-white" onClick={() => void db.weights.delete(w.date)}>
                 <Trash2 className="h-3 w-3" />
               </button>
             </li>

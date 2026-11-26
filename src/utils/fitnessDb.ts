@@ -112,6 +112,7 @@ export function cleanSettings(v: unknown): Settings {
     goal: goals.includes(o.goal as Goal) ? (o.goal as Goal) : DEFAULT_SETTINGS.goal,
     restSeconds: Math.min(600, Math.max(15, Math.round(clampNum(o.restSeconds, DEFAULT_SETTINGS.restSeconds, 600)))),
     autoRest: o.autoRest !== false,
+    goalWeight: Math.round(clampNum(o.goalWeight, 0, 700) * 10) / 10,
     targets: {
       kcal: clampNum(t.kcal, DEFAULT_TARGETS.kcal, 20000),
       protein: clampNum(t.protein, DEFAULT_TARGETS.protein, 1000),

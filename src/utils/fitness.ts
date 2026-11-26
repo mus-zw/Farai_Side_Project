@@ -80,6 +80,8 @@ export interface Settings {
   /** Rest between working sets, in seconds. */
   restSeconds: number;
   autoRest: boolean;
+  /** Target body weight in the user's unit; 0 means none set. */
+  goalWeight: number;
 }
 
 /** Legacy (localStorage v1) shape, only read once to migrate into IndexedDB. */
@@ -104,6 +106,7 @@ export const DEFAULT_SETTINGS: Settings = {
   goal: 'maintain',
   restSeconds: 90,
   autoRest: true,
+  goalWeight: 0,
 };
 
 /**
@@ -194,6 +197,18 @@ const WEEK: Record<Schedule, Partial<Record<number, DayType>>> = {
   ppl6: { 1: 'push', 2: 'pull', 3: 'legs', 4: 'push', 5: 'pull', 6: 'legs' },
   ppl3: { 1: 'push', 3: 'pull', 5: 'legs' },
 };
+/** Training days per week the schedule plans. */
+export function plannedDaysPerWeek(schedule: Schedule): number {
+  return Object.keys(WEEK[schedule]).length;
+}
+
+/** Whole calendar days from `from` to `to` (both YYYY-MM-DD); negative if `to` is earlier. */
+export function daysBetween(from: string, to: string): number {
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(fy, fm - 1, fd)) / 86400000);
+}
+
 export const SCHEDULE_LABEL: Record<Schedule, string> = {
   ppl6: '6 days: PPL twice a week',
   ppl3: '3 days: PPL once a week',
