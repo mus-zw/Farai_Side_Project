@@ -9,12 +9,13 @@ import { hasConsent } from '../../utils/consent';
 import EngineeredBy from '../../components/EngineeredBy';
 import { isStandalone, linkTo } from '../../utils/site';
 import { ArrowLeft, ScanSearch, UserCircle2 } from 'lucide-react';
-import { GOAL_LABEL, Goal, SCHEDULE_LABEL, Schedule, Unit, MAX_ATHLETE_NAME, cleanAthleteName, cleanWeightInput, num } from '../../utils/fitness';
+import { DAILY_LIMITS, GOAL_LABEL, Goal, SCHEDULE_LABEL, Schedule, Unit, MAX_ATHLETE_NAME, cleanAthleteName, cleanWeightInput, num } from '../../utils/fitness';
 import { renameAthlete, resetEverything, seedSampleData, startFresh } from '../../utils/fitnessDb';
 import { useFitness } from '../../components/fitness/FitnessProvider';
 import { useProfile } from '../../components/ProfileProvider';
 import BackupPanel from '../../components/fitness/BackupPanel';
 import AuthPanel from '../../components/fitness/AuthPanel';
+import TargetsCheck from '../../components/fitness/TargetsCheck';
 import { useFitnessAuth } from '../../components/fitness/FitnessAuthProvider';
 
 const REST_PRESETS = [60, 90, 120, 180];
@@ -40,7 +41,7 @@ export default function ProfilePage() {
 
   const setTarget = (key: 'kcal' | 'protein' | 'carbs' | 'fat' | 'meals', raw: string) => {
     const v = Math.round(num(raw));
-    updateSettings({ targets: { [key]: key === 'meals' ? Math.min(12, v) : v } });
+    updateSettings({ targets: { [key]: Math.min(v, DAILY_LIMITS[key]) } });
   };
 
   return (
@@ -250,6 +251,7 @@ export default function ProfilePage() {
             Meals / day
             <input className="f-input f-center" inputMode="numeric" data-testid="profile-meals" value={settings.targets.meals} onChange={(e) => setTarget('meals', e.target.value)} />
           </label>
+          <TargetsCheck targets={settings.targets} onFix={(kcal) => updateSettings({ targets: { kcal } })} />
         </div>
 
         <div className="flex items-center justify-between gap-3 text-sm">

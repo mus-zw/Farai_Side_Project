@@ -296,8 +296,10 @@ body {
   transition: border-color 0.15s, background 0.15s, opacity 0.15s;
 }
 [data-theme="fitness"] .f-btn:hover { border-color: #3a4552; }
-[data-theme="fitness"] .f-btn-primary { background: var(--f-accent); border-color: var(--f-accent); color: var(--f-accent-ink); }
-[data-theme="fitness"] .f-btn-primary:hover { filter: brightness(1.08); }
+/* White label on a deep orange fill (about 7.3:1) so the main action is crisp; the bright accent stays on the border. */
+[data-theme="fitness"] .f-btn-primary { background: #9a3412; border-color: var(--f-accent); color: #ffffff; font-weight: 800; }
+[data-theme="fitness"] .f-btn-primary:hover { background: #b23c15; }
+[data-theme="fitness"] .f-btn-primary:active { background: #862d0f; }
 [data-theme="fitness"] .f-btn-danger { color: var(--f-bad); }
 [data-theme="fitness"] .f-btn:disabled,
 [data-theme="fitness"] .f-btn-primary:disabled,

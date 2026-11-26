@@ -298,6 +298,23 @@ export function workingSets(ex: ExerciseLog): SetEntry[] {
 }
 
 /** Volume = sum of weight x reps over the working sets. */
+/**
+ * Is this in-progress session still exactly what starting it would have given: same exercises, same
+ * prefilled sets, nothing ticked, nothing typed? Then it can be swapped for another day without losing work.
+ */
+export function isPristineDraft(draft: Session, history: readonly Session[]): boolean {
+  const fresh = newSession(draft.day, draft.date, history);
+  if (draft.exercises.length !== fresh.exercises.length) return false;
+  return draft.exercises.every((e, i) => {
+    const f = fresh.exercises[i];
+    return (
+      e.name === f.name &&
+      e.sets.length === f.sets.length &&
+      e.sets.every((x, j) => !x.done && x.weight === f.sets[j].weight && x.reps === f.sets[j].reps && x.type === f.sets[j].type)
+    );
+  });
+}
+
 export function sessionVolume(s: Session): number {
   return s.exercises.reduce(
     (total, ex) => total + workingSets(ex).reduce((t, set) => t + num(set.weight) * num(set.reps), 0),
@@ -350,6 +367,33 @@ export function mealTotals(meals: readonly Meal[]): { kcal: number; protein: num
 /** Calories from macros (4/4/9), for when a meal is entered as grams only. */
 export function kcalFromMacros(protein: number, carbs: number, fat: number): number {
   return Math.round(protein * 4 + carbs * 4 + fat * 9);
+}
+
+/** The most a single meal can realistically hold; typed values are clamped to these. */
+export const MEAL_LIMITS = { kcal: 4000, protein: 300, carbs: 600, fat: 250 } as const;
+
+/** Ceilings for daily targets; typed values are clamped to these. */
+export const DAILY_LIMITS = { kcal: 8000, protein: 600, carbs: 1000, fat: 500, meals: 12 } as const;
+
+export interface KcalCheck {
+  /** What the macros add up to (4 / 4 / 9 per gram). */
+  macroKcal: number;
+  /** Typed calories minus macroKcal. */
+  diff: number;
+  /** False when the calories cannot be squared with the macros. */
+  ok: boolean;
+}
+
+/**
+ * Do the calories fit the macros? Labels round and fibre or alcohol shift things a little, so a gap of
+ * up to 15% (and never less than 40 kcal of slack) is fine; anything wider is a typo or a wrong figure.
+ * With no macros entered there is nothing to compare, so it is always ok.
+ */
+export function checkMealKcal(kcal: number, protein: number, carbs: number, fat: number): KcalCheck {
+  const macroKcal = kcalFromMacros(protein, carbs, fat);
+  const diff = kcal - macroKcal;
+  if (macroKcal === 0) return { macroKcal, diff, ok: true };
+  return { macroKcal, diff, ok: Math.abs(diff) <= Math.max(40, macroKcal * 0.15) };
 }
 
 /** 0-1 progress towards a target; 0 when there is no target. */

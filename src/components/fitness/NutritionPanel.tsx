@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
-import { Meal, Targets, dateLabel, kcalFromMacros, mealTotals, newId, num, progress, shiftDate, toISODate } from '../../utils/fitness';
+import { DAILY_LIMITS, MEAL_LIMITS, Meal, Targets, checkMealKcal, dateLabel, kcalFromMacros, mealTotals, newId, num, progress, shiftDate, toISODate } from '../../utils/fitness';
+import TargetsCheck from './TargetsCheck';
 import { db } from '../../utils/fitnessDb';
 import type { MealDraft } from '../../utils/mealScan';
 import MealScan from './MealScan';
@@ -47,10 +48,45 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
   const [saving, setSaving] = useState(false);
   /** Shown after a photo scan: the numbers in the form are an estimate to check. */
   const [scanNote, setScanNote] = useState('');
+  /** True while calories follow the macros (4/4/9); false once the person has typed their own figure. */
+  const [kcalAuto, setKcalAuto] = useState(true);
   const busy = useRef(false); // set synchronously, so two taps in the same tick cannot both get through
   const totals = mealTotals(meals);
   const today = toISODate();
-  const set = (k: keyof typeof f, v: string, max = 5) => setF((x) => ({ ...x, [k]: k === 'name' ? v.slice(0, 60) : v.replace(/\D/g, '').slice(0, max) }));
+
+  const fromMacros = (x: { protein: string; carbs: string; fat: string }) => kcalFromMacros(num(x.protein), num(x.carbs), num(x.fat));
+  const asKcalText = (n: number) => (n > 0 ? String(Math.min(n, MEAL_LIMITS.kcal)) : '');
+  const set = (k: keyof typeof f, v: string) => {
+    if (k === 'name') {
+      setF((x) => ({ ...x, name: v.slice(0, 60) }));
+      return;
+    }
+    // Digits only, and never more than a meal can realistically hold.
+    const digits = v.replace(/\D/g, '').slice(0, 5);
+    const value = digits === '' ? '' : String(Math.min(Number(digits), MEAL_LIMITS[k]));
+    setF((x) => {
+      const next = { ...x, [k]: value };
+      // Calories follow the macros until the person types their own; clearing the field hands it back.
+      if (k === 'kcal') {
+        if (value === '') next.kcal = asKcalText(fromMacros(next));
+      } else if (kcalAuto) next.kcal = asKcalText(fromMacros(next));
+      return next;
+    });
+    if (k === 'kcal') setKcalAuto(value === '');
+  };
+
+  const mp = num(f.protein);
+  const mc = num(f.carbs);
+  const mf = num(f.fat);
+  const typedKcal = Math.round(num(f.kcal));
+  const macrosEntered = mp > 0 || mc > 0 || mf > 0;
+  const kcalCheck = checkMealKcal(typedKcal, mp, mc, mf);
+  const conflict = macrosEntered && typedKcal > 0 && !kcalCheck.ok;
+  const useMacroKcal = () => {
+    setF((x) => ({ ...x, kcal: asKcalText(kcalCheck.macroKcal) }));
+    setKcalAuto(true);
+    setError('');
+  };
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,9 +95,14 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
     const carbs = num(f.carbs);
     const fat = num(f.fat);
     // Calories can be typed, or worked out from the macros (4/4/9).
-    const kcal = Math.round(num(f.kcal)) || kcalFromMacros(protein, carbs, fat);
+    const kcal = Math.min(MEAL_LIMITS.kcal, Math.round(num(f.kcal)) || kcalFromMacros(protein, carbs, fat));
     if (!kcal && !protein) {
       setError('Enter calories or at least some protein for the meal.');
+      return;
+    }
+    // Calories that cannot be squared with the macros are a typo: stop and say what they should be.
+    if (conflict) {
+      setError(`Calories (${typedKcal}) do not match your macros, which add up to ${kcalCheck.macroKcal} kcal (4 per g of protein and carbs, 9 per g of fat). Use ${kcalCheck.macroKcal} or correct the numbers.`);
       return;
     }
     setError('');
@@ -80,6 +121,7 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
     busy.current = false;
     setSaving(false);
     setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
+    setKcalAuto(true);
     setEditingMeal(null);
     setScanNote('');
   };
@@ -93,24 +135,27 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
     setEditingMeal(null);
     setError('');
     setF({ name: d.name, kcal: String(d.kcal), protein: String(d.protein), carbs: String(d.carbs), fat: String(d.fat) });
+    setKcalAuto(false); // the estimate's own calories stand until changed
     setScanNote('Estimated from your photo. Check the portions and numbers, change anything that is off, then press Add.');
   };
 
   const startEdit = (m: Meal) => {
     setEditingMeal(m);
     setError('');
+    setKcalAuto(false);
     setF({ name: m.name, kcal: String(m.kcal), protein: String(m.protein), carbs: String(m.carbs), fat: String(m.fat) });
   };
   const cancelEdit = () => {
     setScanNote('');
     setEditingMeal(null);
     setError('');
+    setKcalAuto(true);
     setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
   };
 
   const setTarget = (key: keyof Targets, raw: string) => {
     const v = Math.round(num(raw));
-    onTargets({ [key]: key === 'meals' ? Math.min(v, 12) : v });
+    onTargets({ [key]: Math.min(v, DAILY_LIMITS[key]) });
   };
 
   return (
@@ -164,6 +209,7 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
                 <input className="f-input f-center" inputMode="numeric" data-testid={`target-${key}`} value={targets[key]} onChange={(e) => setTarget(key, e.target.value)} />
               </label>
             ))}
+            <TargetsCheck targets={targets} onFix={(kcal) => onTargets({ kcal })} />
             <p className="col-span-full" style={{ fontSize: 10 }}>
               Starting points only. Adjust them to your own goals; this is not medical or dietary advice.
             </p>
@@ -213,9 +259,9 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
         <input className="f-input" value={f.name} onChange={(e) => set('name', e.target.value)} placeholder={`Meal ${meals.length + 1}`} aria-label="Meal name" />
         <div className="grid grid-cols-[repeat(4,minmax(0,1fr))_auto] gap-2">
           <input className="f-input f-center" inputMode="numeric" value={f.kcal} onChange={(e) => set('kcal', e.target.value)} placeholder="kcal" aria-label="Calories" data-testid="meal-kcal" />
-          <input className="f-input f-center" inputMode="numeric" value={f.protein} onChange={(e) => set('protein', e.target.value, 4)} placeholder="P g" aria-label="Protein in grams" data-testid="meal-protein" />
-          <input className="f-input f-center" inputMode="numeric" value={f.carbs} onChange={(e) => set('carbs', e.target.value, 4)} placeholder="C g" aria-label="Carbs in grams" data-testid="meal-carbs" />
-          <input className="f-input f-center" inputMode="numeric" value={f.fat} onChange={(e) => set('fat', e.target.value, 4)} placeholder="F g" aria-label="Fat in grams" data-testid="meal-fat" />
+          <input className="f-input f-center" inputMode="numeric" value={f.protein} onChange={(e) => set('protein', e.target.value)} placeholder="P g" aria-label="Protein in grams" data-testid="meal-protein" />
+          <input className="f-input f-center" inputMode="numeric" value={f.carbs} onChange={(e) => set('carbs', e.target.value)} placeholder="C g" aria-label="Carbs in grams" data-testid="meal-carbs" />
+          <input className="f-input f-center" inputMode="numeric" value={f.fat} onChange={(e) => set('fat', e.target.value)} placeholder="F g" aria-label="Fat in grams" data-testid="meal-fat" />
           <button type="submit" data-testid="add-meal" className="f-btn-primary" disabled={saving}>
             {editingMeal ? 'Save' : 'Add'}
           </button>
@@ -230,7 +276,23 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
             {error}
           </p>
         )}
-        <p className="f-small">Leave kcal empty to work it out from the macros (4 / 4 / 9 per gram).</p>
+        {macrosEntered && (
+          <p className="f-small" data-testid="macro-kcal-line">
+            Macros add up to <strong style={{ color: 'var(--f-text)' }}>{kcalCheck.macroKcal} kcal</strong> (4 per g of protein and carbs, 9 per g of fat).
+            {conflict && (
+              <>
+                {' '}
+                <span role="status" data-testid="kcal-conflict" style={{ color: 'var(--f-gold)' }}>
+                  Your calories ({typedKcal}) are far from that.
+                </span>{' '}
+                <button type="button" className="underline" style={{ minHeight: 32 }} data-testid="use-macro-kcal" onClick={useMacroKcal}>
+                  Use {kcalCheck.macroKcal} kcal
+                </button>
+              </>
+            )}
+          </p>
+        )}
+        <p className="f-small">Calories fill in from the macros as you type them. Type your own figure to override it; it has to roughly match the macros.</p>
       </form>
     </section>
   );

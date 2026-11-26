@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Check, Pin } from 'lucide-react';
-import { DAY_LABEL, DAY_TYPES, DayType, ExerciseLog, Session, SetEntry, SET_TYPES, SET_TYPE_LABEL, SET_TYPE_TAG, Settings, blankSet, cleanWeightInput, cueKey, dateLabel, newExercise, newSession, num, previousSets, sessionSetCount, sessionVolume } from '../../utils/fitness';
+import { DAY_LABEL, DAY_TYPES, DayType, ExerciseLog, Session, SetEntry, SET_TYPES, SET_TYPE_LABEL, SET_TYPE_TAG, Settings, blankSet, cleanWeightInput, cueKey, isPristineDraft, dateLabel, newExercise, newSession, num, previousSets, sessionSetCount, sessionVolume } from '../../utils/fitness';
 import { estimate1RM } from '../../utils/fitnessMath';
 import { db, getDraft, saveDraft, setCue } from '../../utils/fitnessDb';
 
@@ -10,7 +10,14 @@ interface Props {
   /** Pinned cues, keyed by lower-case exercise name. */
   cues: Record<string, string>;
   settings: Settings;
-  suggested: DayType;
+  /** The day in use: the one picked in the plan, else today's, else the next in rotation. */
+  activeDay: DayType;
+  /** What made it the active day, for the label: "selected", "today" or "next up". */
+  activeLabel: string;
+  /** Bumps when a day is tapped in the week plan, which opens that day's session. */
+  openCount: number;
+  /** The person chose a day on purpose (starting one, or switching): keep it. */
+  onDayChosen: (day: DayType) => void;
   onSaved: (message: string) => void;
   startRest: (seconds: number) => void;
   /** A saved session the user asked to edit (from History). Handled once, then cleared. */
@@ -42,7 +49,7 @@ function useDraft() {
 }
 
 /** Start a Push, Pull or Legs session, then log each set as one row. Sets start prefilled from last time. */
-export default function SessionLogger({ sessions, cues, settings, suggested, onSaved, startRest, editRequest, onEditHandled }: Props) {
+export default function SessionLogger({ sessions, cues, settings, activeDay, activeLabel, openCount, onDayChosen, onSaved, startRest, editRequest, onEditHandled }: Props) {
   const { draft, setDraft, loaded } = useDraft();
   const [newName, setNewName] = useState('');
   const [error, setError] = useState('');
@@ -69,6 +76,31 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
   }, [editRequest, loaded]);
   const editing = !!draft && sessions.some((s) => s.id === draft.id);
 
+  // Keep the session on the day in use. A plan tap opens that day's session; an untouched session for a
+  // different day is swapped; one with entries in it is never replaced behind the person's back.
+  const lastOpen = useRef(openCount);
+  useEffect(() => {
+    if (!loaded) return;
+    const explicitOpen = openCount !== lastOpen.current;
+    lastOpen.current = openCount;
+    if (editing) return;
+    if (!draft) {
+      if (explicitOpen) setDraft(newSession(activeDay, undefined, sessions));
+      return;
+    }
+    if (draft.day !== activeDay && isPristineDraft(draft, sessions)) setDraft(newSession(activeDay, undefined, sessions));
+  }, [loaded, openCount, activeDay, draft, editing, sessions, setDraft]);
+
+  /** Switch the session in progress to another day, asking first when that would throw away entries. */
+  const switchDay = (day: DayType) => {
+    if (!draft || draft.day === day) return;
+    const pristine = isPristineDraft(draft, sessions);
+    if (!pristine && !window.confirm(`Switch to ${DAY_LABEL[day]}? The sets you entered for ${DAY_LABEL[draft.day]} will be discarded.`)) return;
+    setError('');
+    onDayChosen(day);
+    setDraft(newSession(day, undefined, sessions));
+  };
+
   const patch = (fn: (s: Session) => Session) => setDraft((d) => (d ? fn(d) : d));
   const patchExercise = (id: string, fn: (e: ExerciseLog) => ExerciseLog) =>
     patch((s) => ({ ...s, exercises: s.exercises.map((e) => (e.id === id ? fn(e) : e)) }));
@@ -77,6 +109,7 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
 
   const start = (day: DayType) => {
     setError('');
+    onDayChosen(day);
     setDraft(newSession(day, undefined, sessions));
   };
 
@@ -123,9 +156,9 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
         <p className="f-small">Pick a day. Your sets start prefilled with what you lifted last time, and are saved as you type.</p>
         <div className="flex flex-wrap gap-2">
           {DAY_TYPES.map((d) => (
-            <button key={d} type="button" data-testid={`start-${d}`} onClick={() => start(d)} className={d === suggested ? 'f-btn-primary' : 'f-btn'} style={{ minHeight: 44, padding: '0 20px' }}>
+            <button key={d} type="button" data-testid={`start-${d}`} onClick={() => start(d)} className={d === activeDay ? 'f-btn-primary' : 'f-btn'} style={{ minHeight: 44, padding: '0 20px' }}>
               Start {DAY_LABEL[d]}
-              {d === suggested ? ' (next up)' : ''}
+              {d === activeDay ? ` (${activeLabel})` : ''}
             </button>
           ))}
         </div>
@@ -159,6 +192,24 @@ export default function SessionLogger({ sessions, cues, settings, suggested, onS
           </button>
         </div>
       </div>
+      {!editing && (
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Session day">
+          <span className="f-small mr-1">Day</span>
+          {DAY_TYPES.map((d) => (
+            <button key={d} type="button" className="f-chip" aria-pressed={draft.day === d} data-testid={`switch-${d}`} onClick={() => switchDay(d)}>
+              {DAY_LABEL[d]}
+            </button>
+          ))}
+        </div>
+      )}
+      {!editing && draft.day !== activeDay && (
+        <p className="text-xs" role="status" style={{ color: 'var(--f-gold)' }} data-testid="day-mismatch">
+          This is a {DAY_LABEL[draft.day]} session, but your plan says {DAY_LABEL[activeDay]}.{' '}
+          <button type="button" className="underline" style={{ minHeight: 32 }} onClick={() => switchDay(activeDay)}>
+            Switch to {DAY_LABEL[activeDay]}
+          </button>
+        </p>
+      )}
       {draft.exercises.some((e) => cues[cueKey(e.name)]) && (
         <div className="f-cuebar" data-testid="cue-bar" aria-label="Pinned cues">
           <Pin className="h-3.5 w-3.5 shrink-0 f-accent" />
