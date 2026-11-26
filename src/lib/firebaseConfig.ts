@@ -12,6 +12,8 @@ export interface FirebaseWebConfig {
   appId: string;
   storageBucket?: string;
   messagingSenderId?: string;
+  /** Accepted so a config pasted from the Firebase console works as-is. Analytics is never started. */
+  measurementId?: string;
 }
 
 const val = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -25,7 +27,8 @@ export function readFirebaseConfig(env: Record<string, unknown>): FirebaseWebCon
   if (!apiKey || !authDomain || !projectId || !appId) return null;
   const storageBucket = val(env.VITE_FIREBASE_STORAGE_BUCKET);
   const messagingSenderId = val(env.VITE_FIREBASE_MESSAGING_SENDER_ID);
-  return { apiKey, authDomain, projectId, appId, ...(storageBucket && { storageBucket }), ...(messagingSenderId && { messagingSenderId }) };
+  const measurementId = val(env.VITE_FIREBASE_MEASUREMENT_ID);
+  return { apiKey, authDomain, projectId, appId, ...(storageBucket && { storageBucket }), ...(messagingSenderId && { messagingSenderId }), ...(measurementId && { measurementId }) };
 }
 
 export const firebaseConfig: FirebaseWebConfig | null = readFirebaseConfig(import.meta.env as Record<string, unknown>);
