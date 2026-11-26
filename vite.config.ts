@@ -33,7 +33,10 @@ function ortWasmAssets(external: boolean): Plugin {
     generateBundle() {
       // With VITE_ORT_WASM_BASE_URL set the runtime is served from elsewhere (R2, a CDN), so the
       // ~28 MiB wasm is left out of the build instead of breaking a 25 MiB-per-file static host.
-      if (external) return;
+      if (external) {
+        this.info('VITE_ORT_WASM_BASE_URL is set: ONNX Runtime wasm is NOT copied into dist/ (host ort-wasm-simd-threaded.jsep.mjs and .wasm there).');
+        return;
+      }
       for (const name of Object.keys(files)) {
         this.emitFile({type: 'asset', fileName: `ort/${name}`, source: fs.readFileSync(path.join(dir, name))});
       }
@@ -104,10 +107,17 @@ function assetSizeGuard(): Plugin {
   };
 }
 
+/**
+ * Whether a VITE_* base URL is really set. Blank or whitespace-only counts as unset, matching
+ * resolveBase() in src/utils/modelUrls.ts: if the build and the runtime disagreed, the wasm could be
+ * left out of dist/ while the app still looked for it locally.
+ */
+const isSet = (v: string | undefined) => typeof v === 'string' && v.trim() !== '';
+
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
   return {
-    plugins: [react(), tailwindcss(), ortWasmAssets(Boolean(env.VITE_ORT_WASM_BASE_URL)), mediapipeWasmAssets(Boolean(env.VITE_MEDIAPIPE_WASM_BASE_URL)), assetSizeGuard()],
+    plugins: [react(), tailwindcss(), ortWasmAssets(isSet(env.VITE_ORT_WASM_BASE_URL)), mediapipeWasmAssets(isSet(env.VITE_MEDIAPIPE_WASM_BASE_URL)), assetSizeGuard()],
     resolve: {
       // Use onnxruntime-web's "extern wasm" build: it loads its wasm from the
       // /ort/ path set in browserInference.ts (see ortWasmAssets above) instead
