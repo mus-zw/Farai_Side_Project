@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Toast, { ToastMessage } from './components/Toast';
@@ -66,6 +67,7 @@ export default function App() {
 
         <Footer />
         <Toast toasts={toasts} onDismiss={dismissNotification} />
+        <SpeedInsights />
       </div>
     </BrowserRouter>
   );
