@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import { Meal, Targets, dateLabel, kcalFromMacros, mealTotals, newId, num, progress, shiftDate, toISODate } from '../../utils/fitness';
 import { db } from '../../utils/fitnessDb';
+import type { MealDraft } from '../../utils/mealScan';
+import MealScan from './MealScan';
 
 interface Props {
   date: string;
@@ -43,6 +45,8 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
   const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  /** Shown after a photo scan: the numbers in the form are an estimate to check. */
+  const [scanNote, setScanNote] = useState('');
   const busy = useRef(false); // set synchronously, so two taps in the same tick cannot both get through
   const totals = mealTotals(meals);
   const today = toISODate();
@@ -77,6 +81,19 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
     setSaving(false);
     setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
     setEditingMeal(null);
+    setScanNote('');
+  };
+
+  // A scan only fills the form: nothing is saved until the person checks it and presses Add.
+  const applyDraft = (d: MealDraft) => {
+    if (d.items.length === 0) {
+      setScanNote('');
+      return;
+    }
+    setEditingMeal(null);
+    setError('');
+    setF({ name: d.name, kcal: String(d.kcal), protein: String(d.protein), carbs: String(d.carbs), fat: String(d.fat) });
+    setScanNote('Estimated from your photo. Check the portions and numbers, change anything that is off, then press Add.');
   };
 
   const startEdit = (m: Meal) => {
@@ -85,6 +102,7 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
     setF({ name: m.name, kcal: String(m.kcal), protein: String(m.protein), carbs: String(m.carbs), fat: String(m.fat) });
   };
   const cancelEdit = () => {
+    setScanNote('');
     setEditingMeal(null);
     setError('');
     setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' });
@@ -157,9 +175,13 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
         {meals.length === 0 && <li className="f-small">No meals logged for this day.</li>}
         {meals.map((m) => (
           <li key={m.id} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: 'var(--f-border)', background: 'var(--f-surface-2)' }}>
-            <span className="min-w-0 truncate">{m.name}</span>
-            <span className="flex shrink-0 items-center gap-3 f-muted">
-              {m.kcal} kcal · P{m.protein} C{m.carbs} F{m.fat}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate" data-testid="meal-name">{m.name}</span>
+              <span className="block f-muted">
+                {m.kcal} kcal · P{m.protein} C{m.carbs} F{m.fat}
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center f-muted">
               <button type="button" aria-label={`Edit ${m.name}`} data-testid="meal-edit" className="flex h-9 w-9 items-center justify-center hover:text-white" onClick={() => startEdit(m)}>
                 <Pencil className="h-3.5 w-3.5" />
               </button>
@@ -180,7 +202,14 @@ export default function NutritionPanel({ date, onDate, meals, targets, onTargets
         ))}
       </ul>
 
+      <MealScan onDraft={applyDraft} />
+
       <form onSubmit={add} className="space-y-2">
+        {scanNote && (
+          <p role="status" className="text-xs" style={{ color: 'var(--f-gold)' }} data-testid="scan-note">
+            {scanNote}
+          </p>
+        )}
         <input className="f-input" value={f.name} onChange={(e) => set('name', e.target.value)} placeholder={`Meal ${meals.length + 1}`} aria-label="Meal name" />
         <div className="grid grid-cols-[repeat(4,minmax(0,1fr))_auto] gap-2">
           <input className="f-input f-center" inputMode="numeric" value={f.kcal} onChange={(e) => set('kcal', e.target.value)} placeholder="kcal" aria-label="Calories" data-testid="meal-kcal" />
