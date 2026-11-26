@@ -8,12 +8,20 @@ export const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
 // seconds, and a premature timeout reads to the user as a broken backend.
 export const REQUEST_TIMEOUT_MS = 120_000;
 
+// Where detection runs: on the backend server, or in this browser (ONNX
+// Runtime Web; see browserInference.ts). The backend is the default.
+export type InferenceEngine = 'backend' | 'browser';
+
 export interface AnalysisOptions {
   // Sent as the `confidence` query parameter. Omitted means the backend's
   // configured default (CONFIDENCE_THRESHOLD, 0.25).
   confidenceThreshold?: number;
   onProgress?: (percent: number) => void;
   signal?: AbortSignal;
+  // Defaults to 'backend'.
+  engine?: InferenceEngine;
+  // In-browser runs only: what it is doing right now (loading, downloading...).
+  onPhase?: (message: string) => void;
 }
 
 export interface VisionDetectionResult extends DetectionResponse {
@@ -71,17 +79,26 @@ export async function validateAndExtractImageMetadata(file: File): Promise<Image
 }
 
 /**
- * Runs object detection on the backend.
+ * Runs object detection, on the backend by default or in this browser when
+ * `options.engine` is 'browser'.
  *
- * There is deliberately no offline fallback: any failure is thrown as an
- * error describing what went wrong, so a misconfigured backend can never
- * masquerade as a working one.
+ * There is deliberately no silent fallback between the two, and no fake
+ * results: any failure is thrown as an error describing what went wrong, so a
+ * misconfigured backend or a browser without WebAssembly can never
+ * masquerade as a working one. The UI offers the other engine as an explicit
+ * choice instead.
  */
 export async function detectObjects(
   fileOrBlob: File | Blob,
   options: AnalysisOptions = {},
   imageMeta?: ImageMetadata
 ): Promise<VisionDetectionResult> {
+  if (options.engine === 'browser') {
+    // Loaded on demand so ONNX Runtime stays out of the initial bundle.
+    const { detectInBrowser } = await import('./browserInference');
+    return detectInBrowser(fileOrBlob, options, imageMeta);
+  }
+
   const endpoint = apiUrl('/api/detect');
 
   // The backend's UploadFile parameter is named `file`. It serves whichever

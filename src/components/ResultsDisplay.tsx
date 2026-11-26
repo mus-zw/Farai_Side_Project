@@ -59,7 +59,11 @@ export default function ResultsDisplay({
       {/* 3. Controls & Toggles Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#16213E] bg-[#16213E]/60 p-4">
         <div className="text-xs text-[#CCCCCC]">
-          {detectionResult.cached ? 'Served from backend cache' : 'Annotated by the backend'}
+          {detectionResult.cached
+            ? 'Served from backend cache'
+            : detectionResult.inference_engine === 'webgpu' || detectionResult.inference_engine === 'wasm'
+            ? `Annotated in your browser (${detectionResult.inference_engine === 'webgpu' ? 'WebGPU' : 'WASM'})`
+            : 'Annotated by the backend'}
           {' · '}threshold {formatConfidencePercent(detectionResult.confidence_threshold)}
         </div>
 

@@ -21,6 +21,7 @@ import {
   VisionDetectionResult,
   validateAndExtractImageMetadata,
   AnalysisOptions,
+  InferenceEngine,
 } from '../services/visionApi';
 import { getApiBaseUrl, setApiBaseUrl } from '../services/apiClient';
 import { getHealth, getModelInfo, HealthResponse, ModelInfoResponse } from '../services/systemApi';
@@ -49,6 +50,9 @@ interface DemoProps {
 
 type DemoTabMode = 'single' | 'batch' | 'compare' | 'analytics';
 
+// Remembers whether the visitor chose to run detection in their browser.
+const ENGINE_STORAGE_KEY = 'farai_cv_engine';
+
 export default function Demo({ onNotify }: DemoProps) {
   const [searchParams] = useSearchParams();
 
@@ -67,6 +71,20 @@ export default function Demo({ onNotify }: DemoProps) {
   const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'complete' | 'error'>('idle');
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Where single-image detection runs. 'backend' is the default; 'browser'
+  // runs the ONNX model locally (services/browserInference.ts), no server needed.
+  const [engine, setEngine] = useState<InferenceEngine>(() => {
+    try {
+      return localStorage.getItem(ENGINE_STORAGE_KEY) === 'browser' ? 'browser' : 'backend';
+    } catch {
+      return 'backend';
+    }
+  });
+  const [browserPhase, setBrowserPhase] = useState<string>('');
+  const [browserBackend, setBrowserBackend] = useState<'webgpu' | 'wasm' | null>(null);
+  const [browserNote, setBrowserNote] = useState<string | null>(null);
+  const [browserLoadError, setBrowserLoadError] = useState<string | null>(null);
 
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
@@ -114,6 +132,42 @@ export default function Demo({ onNotify }: DemoProps) {
     return () => window.clearInterval(timer);
   }, [refreshBackendStatus]);
 
+  // Load the in-browser runtime and model ahead of the first image, so the
+  // wait (about 40 MB on the very first visit) shows up in the engine bar.
+  const preloadBrowserModel = useCallback(() => {
+    setBrowserLoadError(null);
+    import('../services/browserInference')
+      .then(({ loadBrowserModel }) => loadBrowserModel(setBrowserPhase))
+      .then((model) => {
+        setBrowserBackend(model.backend);
+        setBrowserNote(model.fallbackReason ?? null);
+        setBrowserPhase('');
+      })
+      .catch((err: any) => {
+        setBrowserLoadError(err?.message || 'Could not start in-browser detection.');
+        setBrowserPhase('');
+      });
+  }, []);
+
+  const chooseEngine = useCallback(
+    (next: InferenceEngine) => {
+      setEngine(next);
+      try {
+        localStorage.setItem(ENGINE_STORAGE_KEY, next);
+      } catch {
+        // Not persisting the choice is fine.
+      }
+      if (next === 'browser') preloadBrowserModel();
+    },
+    [preloadBrowserModel]
+  );
+
+  useEffect(() => {
+    if (engine === 'browser') preloadBrowserModel();
+    // Only on mount: a remembered 'browser' choice starts loading right away.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Initialize Gallery
   useEffect(() => {
     // Earlier builds seeded a fabricated penguin result into the gallery;
@@ -143,13 +197,30 @@ export default function Demo({ onNotify }: DemoProps) {
     setOriginalImageUrl(newUrl);
   }, []);
 
+  // After an in-browser run, remember which backend ran it and clear the phase text.
+  const noteBrowserResult = (result: VisionDetectionResult) => {
+    setBrowserPhase('');
+    if (result.inference_engine === 'webgpu' || result.inference_engine === 'wasm') {
+      setBrowserBackend(result.inference_engine);
+    }
+  };
+
+  // Offered after a failure: switch engines and run the same image again.
+  const switchEngineAndRetry = (next: InferenceEngine) => {
+    chooseEngine(next);
+    if (currentFile && originalImageUrl) {
+      processImage(currentFile, originalImageUrl, activeSampleId || undefined, currentFile.name, imageMetadata || undefined, next);
+    }
+  };
+
   // Process Single Image
   const processImage = async (
     fileOrBlob: File | Blob,
     previewUrl: string,
     sampleId?: string,
     title: string = 'User Upload',
-    meta?: ImageMetadata
+    meta?: ImageMetadata,
+    engineOverride?: InferenceEngine
   ) => {
     try {
       if (abortControllerRef.current) {
@@ -163,6 +234,8 @@ export default function Demo({ onNotify }: DemoProps) {
 
       const options: AnalysisOptions = {
         confidenceThreshold,
+        engine: engineOverride ?? engine,
+        onPhase: setBrowserPhase,
         signal: abortControllerRef.current.signal,
         onProgress: (p) => {
           setUploadProgress(p);
@@ -171,6 +244,7 @@ export default function Demo({ onNotify }: DemoProps) {
       };
 
       const result = await detectObjects(fileOrBlob, options, meta);
+      noteBrowserResult(result);
 
       setDetectionResult(result);
       setStatus('complete');
@@ -230,9 +304,10 @@ export default function Demo({ onNotify }: DemoProps) {
       try {
         const result = await detectObjects(
           currentFile,
-          { confidenceThreshold: threshold, signal: controller.signal },
+          { confidenceThreshold: threshold, engine, onPhase: setBrowserPhase, signal: controller.signal },
           imageMetadata || undefined
         );
+        noteBrowserResult(result);
         setDetectionResult(result);
         setStatus('complete');
         setErrorMessage(null);
@@ -604,7 +679,84 @@ export default function Demo({ onNotify }: DemoProps) {
         <div className="space-y-8 animate-in fade-in">
           {/* Upload Zone & Architecture Selector */}
           <div className="space-y-4">
+            {/* Where detection runs: the backend, or in this browser (no server needed) */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div
+                role="group"
+                aria-label="Inference engine"
+                className="inline-flex rounded-xl border border-neutral-800 bg-neutral-900/60 p-1"
+              >
+                {([
+                  ['backend', 'Backend server'],
+                  ['browser', 'In this browser'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    data-testid={`engine-${value}`}
+                    aria-pressed={engine === value}
+                    onClick={() => chooseEngine(value)}
+                    className={`min-h-[36px] rounded-lg px-3.5 py-1.5 font-semibold transition-colors ${
+                      engine === value
+                        ? 'bg-[#32FF00] text-neutral-950'
+                        : 'text-neutral-400 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-neutral-500">
+                {engine === 'browser'
+                  ? 'Single images only. Batch, comparison and video always use the backend.'
+                  : 'Needs the backend server. No server? Run it in your browser instead.'}
+              </p>
+            </div>
+
+            {/* In-browser engine: what is loaded and what it is doing */}
+            {engine === 'browser' && (
+              <div
+                data-testid="browser-engine-bar"
+                className="flex flex-col gap-1 p-3.5 rounded-xl border border-neutral-800 bg-neutral-900/60 text-xs"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-block h-2.5 w-2.5 rounded-full ${
+                      browserLoadError ? 'bg-rose-500' : browserBackend ? 'bg-[#32FF00]' : 'bg-amber-400'
+                    }`}
+                  />
+                  <span className="font-semibold text-neutral-300">In your browser:</span>
+                  {browserLoadError ? (
+                    <span className="text-rose-300" data-testid="browser-load-error">{browserLoadError}</span>
+                  ) : browserBackend ? (
+                    <span className="font-mono text-white">
+                      yolo11n.onnx · {browserBackend === 'webgpu' ? 'WebGPU' : 'WASM (CPU)'} · 640×640
+                    </span>
+                  ) : (
+                    <span className="text-amber-300">{browserPhase || 'Starting…'}</span>
+                  )}
+                </div>
+                {browserNote && !browserLoadError && <p className="text-[11px] text-neutral-500">{browserNote}</p>}
+                {!browserBackend && !browserLoadError && (
+                  <p className="text-[11px] text-neutral-500">
+                    First use downloads about 40 MB (runtime and model); your browser keeps it for next time.
+                    Nothing you upload leaves this page.
+                  </p>
+                )}
+                {browserLoadError && (
+                  <button
+                    type="button"
+                    onClick={() => chooseEngine('backend')}
+                    className="self-start underline text-neutral-300 hover:text-white"
+                  >
+                    Use the backend instead
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Backend status: what will actually run this image */}
+            {engine === 'backend' && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-neutral-800 bg-neutral-900/60 text-xs">
               <div className="flex items-center gap-2">
                 <span
@@ -639,6 +791,7 @@ export default function Demo({ onNotify }: DemoProps) {
                 </button>
               </div>
             </div>
+            )}
 
             {/* Drag & Drop Area */}
             <div
@@ -726,7 +879,11 @@ export default function Demo({ onNotify }: DemoProps) {
                     </span>
                     <span className="text-neutral-400 hidden sm:inline">
                       {status === 'complete' &&
-                        `Latency: ${detectionResult?.processing_time_ms}ms · Found ${detectionResult?.total_objects} objects`}
+                        `Latency: ${detectionResult?.processing_time_ms}ms · Found ${detectionResult?.total_objects} objects${
+                          detectionResult?.inference_engine === 'webgpu' || detectionResult?.inference_engine === 'wasm'
+                            ? ` · in browser (${detectionResult.inference_engine})`
+                            : ''
+                        }`}
                       {status === 'error' && errorMessage}
                     </span>
                   </div>
@@ -749,6 +906,32 @@ export default function Demo({ onNotify }: DemoProps) {
                       style={{ width: `${Math.max(10, uploadProgress)}%` }}
                     />
                   </div>
+                )}
+
+                {(status === 'uploading' || status === 'analyzing') && engine === 'browser' && browserPhase && (
+                  <p className="text-[11px] text-neutral-400" data-testid="browser-phase">{browserPhase}</p>
+                )}
+
+                {/* One-click way out of a failure: the other engine, same image. */}
+                {status === 'error' && engine === 'browser' && (
+                  <button
+                    type="button"
+                    data-testid="use-backend-instead"
+                    onClick={() => switchEngineAndRetry('backend')}
+                    className="underline text-neutral-200 hover:text-white font-semibold"
+                  >
+                    Use the backend instead
+                  </button>
+                )}
+                {status === 'error' && engine === 'backend' && /Cannot reach the backend/.test(errorMessage || '') && (
+                  <button
+                    type="button"
+                    data-testid="run-in-browser-instead"
+                    onClick={() => switchEngineAndRetry('browser')}
+                    className="underline text-neutral-200 hover:text-white font-semibold"
+                  >
+                    No backend? Run it in this browser instead
+                  </button>
                 )}
               </div>
             )}

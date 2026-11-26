@@ -138,6 +138,38 @@ backend, and if the backend is unreachable or errors, the UI shows the error.
 
 ---
 
+## In-browser detection (no backend)
+
+On `/demo`, the **In this browser** switch runs YOLO11n inside the visitor's browser with
+[ONNX Runtime Web](https://onnxruntime.ai/): **WebGPU first, WASM (CPU) as the fallback**. Nothing is
+uploaded anywhere. It covers single-image detection only; batch, model comparison and video still use the backend.
+
+| | |
+|---|---|
+| Model | `public/models/yolo11n.onnx` (10.2 MB), YOLO11n exported at a fixed 640×640 |
+| Input | `images`: float32 `[1, 3, 640, 640]`, RGB, 0 to 1 (letterboxed, grey 114 padding) |
+| Output | `output0`: float32 `[1, 84, 8400]`: 4 box values (cx, cy, w, h) + 80 COCO class scores per anchor |
+| Post-processing | score threshold (the confidence slider) + class-aware NMS at IoU 0.45, in `src/utils/onnxDetect.ts` |
+| Runtime | `onnxruntime-web` 1.31.1, imported lazily; its wasm is copied to `/ort/` at build time (see `vite.config.ts`) |
+| Large images | anything over 4096 px on its long side is downscaled before inference (the model only sees 640 px) |
+
+**What it costs the visitor.** The first use downloads the ONNX Runtime wasm (28 MB, about 7 MB compressed) and the
+model (10 MB); the browser caches both. Nothing is loaded until someone picks the browser engine, and the runtime is
+not part of the app's main bundle.
+
+**If it fails** (no WebAssembly, model file missing, ...) the page says so and offers **Use the backend instead**; if the
+backend is unreachable it offers **Run it in this browser instead**. There are no fake results in either direction.
+
+**Regenerating the model** (also rewrites `src/utils/cocoClasses.ts` from the model's own metadata):
+
+```bash
+pip install ultralytics onnx
+python scripts/export_yolo_onnx.py yolo11n.pt
+```
+
+Notes: with the static-hosting setup (no cross-origin isolation headers) the WASM backend runs on one thread. The
+ONNX file is derived from Ultralytics YOLO11 weights, which are AGPL-3.0.
+
 ## Component Architecture
 - `src/pages/Demo.tsx` - Central orchestrator for Single Image, Batch, Compare, Analytics, and Video modes
 - `src/components/video/VideoProcessor.tsx` - Main orchestrator for video analysis lifecycle and subtab navigation

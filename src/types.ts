@@ -37,6 +37,9 @@ export interface DetectionResponse {
   supports_segmentation?: boolean;
   // true when the model has no Non-Maximum Suppression step.
   nms_free?: boolean;
+  // Which engine produced this result. Absent (or 'backend') for the server;
+  // 'webgpu' or 'wasm' when the model ran in this browser (browserInference.ts).
+  inference_engine?: 'backend' | 'webgpu' | 'wasm';
 }
 
 export interface BoundingBox {
