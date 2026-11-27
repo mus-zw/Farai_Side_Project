@@ -151,7 +151,7 @@ export default function App() {
           {/* Standalone fitness app: `/` is the app. */}
           {APP_MODE === 'fitness' && (
             <>
-              <Route element={<SpokeLayout title="Fitness" />}>
+              <Route element={<SpokeLayout title="Fitness Hub" />}>
                 <Route path="/privacy" element={<Privacy />} />
               </Route>
               <Route path="*" element={<Navigate to="/fitness" replace />} />

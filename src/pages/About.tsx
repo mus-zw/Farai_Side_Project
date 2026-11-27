@@ -14,7 +14,7 @@ export default function About() {
         </div>
 
         <h1 className="font-display text-4xl sm:text-5xl font-extrabold tracking-tight text-white">
-          Farai Bodias Musariri
+          Farai B Musariri
         </h1>
 
         <p className="text-xl sm:text-2xl font-medium text-[#32FF00]">

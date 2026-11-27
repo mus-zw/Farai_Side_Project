@@ -1,6 +1,6 @@
 # Architecture Upgrades & Advanced Capabilities Document
 
-This document outlines the advanced technical features, performance safeguards, and architectural upgrades implemented into Farai Bodias Musariri's Computer Vision Portfolio application.
+This document outlines the advanced technical features, performance safeguards, and architectural upgrades implemented into Farai B Musariri's Computer Vision Portfolio application.
 
 ---
 

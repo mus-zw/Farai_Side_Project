@@ -1,6 +1,6 @@
 {
-  "name": "Fitness: training, nutrition and form",
-  "short_name": "Fitness",
+  "name": "Fitness Hub",
+  "short_name": "Fitness Hub",
   "description": "Push/Pull/Legs training, nutrition and an on-device form coach. Your log stays on your device.",
   "start_url": "./fitness",
   "scope": "./fitness",

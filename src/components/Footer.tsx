@@ -14,7 +14,7 @@ export default function Footer() {
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-[#32FF00] shadow-[0_0_8px_#32FF00]" />
               <span className="font-display text-base font-bold text-white tracking-tight">
-                Farai Bodias Musariri
+                Farai B Musariri
               </span>
             </div>
             <p className="max-w-md text-[#CCCCCC] text-xs sm:text-sm leading-relaxed">
@@ -51,7 +51,7 @@ export default function Footer() {
               </li>
               <li>
                 <Link to="/home#projects" className="text-[#CCCCCC] hover:text-[#32FF00] transition-colors inline-block py-1" data-testid="footer-projects">
-                  Projects (Auto-Labeler &amp; Fitness)
+                  Projects (Auto-Labeler &amp; Fitness Hub)
                 </Link>
               </li>
               {!demoLocked && (
@@ -117,7 +117,7 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="mt-10 border-t border-[#16213E] pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-[#888888] gap-4">
           <p>
-            © {new Date().getFullYear()} Farai Bodias Musariri. Built with React & Tailwind CSS.{' '}
+            © {new Date().getFullYear()} Farai B Musariri. Built with React & Tailwind CSS.{' '}
             <Link to="/privacy" className="inline-flex min-h-[24px] items-center underline-offset-2 hover:text-[#32FF00] hover:underline" data-testid="footer-privacy">
               Privacy
             </Link>

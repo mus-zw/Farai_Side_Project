@@ -31,7 +31,7 @@ export default function Home() {
             </div>
 
             <h1 className="text-balance font-display text-4xl font-extrabold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Farai Bodias Musariri — <span className="text-[#32FF00]">Computer Vision & AI</span>
+              Farai B Musariri — <span className="text-[#32FF00]">Computer Vision & AI</span>
             </h1>
 
             <p className="text-lg font-medium leading-relaxed text-white sm:text-xl">
@@ -106,7 +106,7 @@ export default function Home() {
               </p>
             </div>
             <div className="shrink-0 space-y-1.5 rounded-xl border border-[#16213E] bg-[#0F1419] p-4 font-mono text-xs">
-              <div className="font-bold text-white">Farai Bodias Musariri</div>
+              <div className="font-bold text-white">Farai B Musariri</div>
               <div className="text-white">MSc Candidate (2025)</div>
               <div className="text-[#CCCCCC]">Rhodes University, ZA</div>
               <div className="pt-1 text-[11px] text-[#32FF00]">SATNAC & SACAIR Author</div>

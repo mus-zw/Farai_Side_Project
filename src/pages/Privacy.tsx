@@ -111,7 +111,7 @@ export default function Privacy() {
 
       <H>Contact</H>
       <p className="mt-2">
-        Responsible party: Farai Bodias Musariri. Questions or requests:{' '}
+        Responsible party: Farai B Musariri. Questions or requests:{' '}
         <a href={`mailto:${CONTACT_EMAIL}?subject=Privacy%20request`} className="text-[#32FF00] underline-offset-2 hover:underline">
           {CONTACT_EMAIL}
         </a>

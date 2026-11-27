@@ -33,7 +33,7 @@ export default function FitnessLaunchingSoon() {
     meta.content = 'noindex';
     document.head.appendChild(meta);
     const previous = document.title;
-    document.title = 'Fitness: Launching Soon';
+    document.title = 'Fitness Hub: Launching Soon';
     return () => {
       meta.remove();
       document.title = previous;
@@ -74,7 +74,7 @@ export default function FitnessLaunchingSoon() {
               <Dumbbell className="h-7 w-7" />
             </span>
             <h1 className="mt-5 text-4xl font-extrabold leading-tight sm:text-5xl" style={{ fontFamily: 'var(--font-display)' }}>
-              Fitness is <span className="f-accent">launching soon</span>
+              Fitness Hub is <span className="f-accent">launching soon</span>
             </h1>
             <p className="mt-3 max-w-xl text-base f-muted" data-testid="soon-pitch">
               Training, nutrition and an on-device AI Form Coach in one private app. We are putting the finishing touches on it and it is not open to the public yet.
@@ -93,7 +93,7 @@ export default function FitnessLaunchingSoon() {
             </ul>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Fitness app: launch updates')}&body=${encodeURIComponent('Please let me know when the Fitness app launches.')}`} className="f-btn-primary" style={{ minHeight: 46, padding: '0 20px' }} data-testid="soon-notify">
+              <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Fitness Hub: launch updates')}&body=${encodeURIComponent('Please let me know when the Fitness app launches.')}`} className="f-btn-primary" style={{ minHeight: 46, padding: '0 20px' }} data-testid="soon-notify">
                 <Mail className="h-4 w-4" /> Get launch updates
               </a>
               {(!isStandalone || lab.external) && !demoLocked && (

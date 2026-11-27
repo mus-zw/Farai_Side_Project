@@ -25,7 +25,7 @@ export default function Navbar() {
     { name: 'Home', to: '/home' },
     { name: 'Projects', to: '/home#projects' },
     ...(demoLocked ? [] : [{ name: 'Demo', to: '/demo' }]),
-    ...(fitnessLocked ? [] : [{ name: 'Fitness', to: '/fitness' }]),
+    ...(fitnessLocked ? [] : [{ name: 'Fitness Hub', to: '/fitness' }]),
     { name: 'About', to: '/about' },
     { name: 'Contact', to: '/contact' },
   ];
@@ -73,7 +73,7 @@ export default function Navbar() {
             <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#32FF00]/40 bg-[#32FF00]/10 text-[#32FF00] transition-all group-hover:bg-[#32FF00] group-hover:text-[#0F1419]">
               <Terminal className="h-4 w-4" />
             </span>
-            <span className="whitespace-nowrap text-base transition-colors group-hover:text-[#32FF00] sm:text-lg">Farai Bodias Musariri</span>
+            <span className="whitespace-nowrap text-base transition-colors group-hover:text-[#32FF00] sm:text-lg">Farai B Musariri</span>
           </Link>
 
           {/* Desktop navigation */}

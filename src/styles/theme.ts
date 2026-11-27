@@ -1,6 +1,6 @@
 /**
  * Design Token Registry: Lime Green Modern Theme
- * Farai Bodias Musariri — Computer Vision & AI Portfolio
+ * Farai B Musariri — Computer Vision & AI Portfolio
  */
 
 export const THEME_COLORS = {

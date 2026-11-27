@@ -1,5 +1,5 @@
 /*
- * Offline shell for the Fitness app. Registered from the fitness app only, with the scope /fitness, so
+ * Offline shell for the Fitness Hub app. Registered from the fitness app only, with the scope /fitness, so
  * the portfolio and /demo never get a service worker. It caches no user data (that lives in IndexedDB)
  * and never touches a cross-origin request (Firebase, fonts, Google model hosts).
  *
@@ -69,7 +69,7 @@ async function navigate(req) {
   } catch {
     const shell = await cache.match(SHELL_KEY);
     if (shell) return shell;
-    return new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Offline</title><body style="font:16px system-ui;background:#0a0c0f;color:#eaeef3;padding:2rem"><h1>You are offline</h1><p>Open Fitness once while online and it will work offline after that.</p>', {
+    return new Response('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Offline</title><body style="font:16px system-ui;background:#0a0c0f;color:#eaeef3;padding:2rem"><h1>You are offline</h1><p>Open Fitness Hub once while online and it will work offline after that.</p>', {
       status: 503,
       headers: { 'content-type': 'text/html; charset=utf-8' },
     });

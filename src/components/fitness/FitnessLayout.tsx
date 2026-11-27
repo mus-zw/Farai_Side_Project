@@ -34,7 +34,7 @@ function AppBar() {
   const { pathname } = useLocation();
   const pro = fitnessStatus(useEntitlements()).active;
   const { status: authStatus, sync, user } = useFitnessAuth();
-  const title = TITLES[pathname.replace(/\/+$/, '') || '/fitness'] ?? 'Fitness';
+  const title = TITLES[pathname.replace(/\/+$/, '') || '/fitness'] ?? 'Fitness Hub';
   // A standalone fitness site with no hub URL configured has no portfolio to go back to.
   const hub = linkTo('hub');
   const hasHub = !isStandalone || hub.external;
@@ -47,7 +47,7 @@ function AppBar() {
         </SiteLink>
       ) : (
         <span className="inline-flex items-center gap-1.5 text-xs font-bold f-muted" data-testid="brand-mark">
-          <Dumbbell className="h-4 w-4 f-accent" /> Fitness
+          <Dumbbell className="h-4 w-4 f-accent" /> Fitness Hub
         </span>
       )}
       <h1 className="f-title" data-testid="view-title">
@@ -138,7 +138,7 @@ function Shell() {
         <>
           <RestTimerBar />
           <UndoBar />
-          <nav className="f-bottomnav" aria-label="Fitness navigation">
+          <nav className="f-bottomnav" aria-label="Fitness Hub navigation">
             {TABS.map(({ to, label, Icon, end }) => (
               <NavLink key={to} to={to} end={end} className="f-nav-item" data-testid={`tab-${label.toLowerCase()}`}>
                 <Icon className="h-5 w-5" />

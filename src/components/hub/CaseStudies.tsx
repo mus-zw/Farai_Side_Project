@@ -7,7 +7,7 @@ import { useDemoGate } from '../../utils/demoGate';
 
 const STUDIES = [
   { tool: 'lab' as const, label: 'Project · CV tool', title: 'CV Auto-Labeler', body: 'Browser-native YOLO11 detection with batch folders, video-frame extraction and YOLO / COCO dataset export. Zero server cost per user.', cta: 'Open the Auto-Labeler', note: '' },
-  { tool: 'fitness' as const, label: 'Project · standalone product', title: 'Fitness: training, nutrition and Form Coach', body: 'A Push/Pull/Legs logger, nutrition and trend tracking, and an on-device AI Form Coach, with optional cloud sync. Local-first, and no video ever leaves the device.', cta: 'Open the Fitness app', note: 'Its own app with its own sign-in and data. Nothing is shared with this site.' },
+  { tool: 'fitness' as const, label: 'Project · standalone product', title: 'Fitness Hub: training, nutrition and Form Coach', body: 'A Push/Pull/Legs logger, nutrition and trend tracking, and an on-device AI Form Coach, with optional cloud sync. Local-first, and no video ever leaves the device.', cta: 'Open the Fitness app', note: 'Its own app with its own sign-in and data. Nothing is shared with this site.' },
 ];
 
 /** Quiet technical links from the portfolio to the live tools. */

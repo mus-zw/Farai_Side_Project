@@ -1,9 +1,9 @@
-# Farai Bodias Musariri — Computer Vision & AI Portfolio
+# Farai B Musariri — Computer Vision & AI Portfolio
 
 > **"Building smart systems that see and understand. MSc researcher in small-object detection and domain adaptation."**  
 > *"I design models that find tiny things in crowded pictures. Currently focused on African penguin monitoring."*
 
-A production-grade, authentic portfolio and interactive computer vision suite developed by **Farai Bodias Musariri**, MSc Computer Science candidate at Rhodes University, Grahamstown, South Africa.
+A production-grade, authentic portfolio and interactive computer vision suite developed by **Farai B Musariri**, MSc Computer Science candidate at Rhodes University, Grahamstown, South Africa.
 
 ---
 
